@@ -1,0 +1,10 @@
+{
+  "id": "task-states",
+  "name": "Task States",
+  "version": "0.0.1",
+  "minAppVersion": "1.0.0",
+  "description": "Gerencie estados de tarefas no Obsidian",
+  "author": "Lucas",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}

@@ -1,0 +1,245 @@
+/* Modo de Visualização */
+.task-list-item[data-task=''] > .task-list-item-checkbox {
+    background-color: var(--task-background-none) !important;
+    border-color: var(--task-todo) !important;
+    margin-right: 5em !important;
+}
+
+.task-list-item[data-task='']::after {
+    content: 'TODO';
+    position: absolute;
+    color: var(--task-todo);
+    font-size: 0.5em;
+    font-weight: 800;
+    left: 0;
+    padding: 0 5px;
+    top: 0;
+    transform: translateY(55%);
+}
+
+.task-list-item[data-task='>'] > .task-list-item-checkbox {
+    background-color: var(--task-progress) !important;
+    border-color: var(--task-progress) !important;
+    margin-right: 5em !important;
+}
+
+.task-list-item[data-task='>']::after {
+    content: 'PROGRESS';
+    position: absolute;
+    color: var(--task-progress);
+    font-size: 0.5em;
+    font-weight: 800;
+    left: 0;
+    padding: 0 5px;
+    top: 0;
+    transform: translateY(55%);
+}
+
+.task-list-item[data-task='!'] > .task-list-item-checkbox {
+    background-color: var(--task-priority) !important;
+    border-color: var(--task-priority) !important;
+    margin-right: 5em !important;
+}
+
+.task-list-item[data-task='!']::after {
+    content: 'PRIORITY';
+    position: absolute;
+    color: var(--task-priority);
+    font-size: 0.5em;
+    font-weight: 800;
+    left: 0;
+    padding: 0 5px;
+    top: 0;
+    transform: translateY(55%);
+}
+
+.task-list-item[data-task='-'] {
+    color: var(--task-muted-text) !important;
+    text-decoration: line-through wavy var(--task-underline-cancelled) 0.02em !important;
+}
+
+.task-list-item[data-task='-'] > .task-list-item-checkbox {
+    background-color: var(--task-cancelled) !important;
+    border-color: var(--task-cancelled) !important;
+    margin-right: 5em !important;
+}
+
+.task-list-item[data-task='-']::after {
+    content: 'CANCELLED';
+    position: absolute;
+    color: var(--task-cancelled);
+    font-size: 0.5em;
+    font-weight: 800;
+    left: 0;
+    padding: 0 5px;
+    top: 0;
+    transform: translateY(55%);
+}
+
+.task-list-item[data-task='x'] {
+    color: var(--task-muted-text) !important;
+    text-decoration: line-through wavy var(--task-underline-done) 0.02em !important;
+}
+
+.task-list-item[data-task='x'] > .task-list-item-checkbox {
+    background-color: var(--task-done) !important;
+    border-color: var(--task-done) !important;
+    margin-right: 5em !important;
+}
+
+.task-list-item[data-task='x']::after {
+    content: 'DONE';
+    position: absolute;
+    color: var(--task-done);
+    font-size: 0.5em;
+    font-weight: 800;
+    left: 0;
+    padding: 0 5px;
+    top: 0;
+    transform: translateY(55%);
+}
+
+.task-list-item[data-task='*'] {
+    color: var(--task-muted-text) !important;
+}
+
+.task-list-item[data-task='*'] > .task-list-item-checkbox {
+    background-color: var(--task-standby) !important;
+    border-color: var(--task-standby) !important;
+    margin-right: 5em !important;
+}
+
+.task-list-item[data-task='*']::after {
+    content: 'STANDBY';
+    position: absolute;
+    color: var(--task-standby);
+    font-size: 0.5em;
+    font-weight: 800;
+    left: 0;
+    padding: 0 5px;
+    top: 0;
+    transform: translateY(55%);
+}
+
+/* Modo de Edição */
+.HyperMD-task-line[data-task=' '] input[type='checkbox'] {
+    background-color: var(--task-background-none) !important;
+    border-color: var(--task-todo) !important;
+}
+
+.HyperMD-task-line[data-task=' '] label.task-list-label::after {
+    content: 'TODO';
+    position: relative;
+    display: inline-block;
+    width: 6em;
+    color: var(--task-todo);
+    font-size: 0.5em;
+    font-weight: 800;
+    padding: 0 5px;
+    left: 0;
+    top: -0.2em;
+}
+
+.HyperMD-task-line[data-task='>'] input[type='checkbox'] {
+    background-color: var(--task-progress) !important;
+    border-color: var(--task-progress) !important;
+}
+
+.HyperMD-task-line[data-task='>'] label.task-list-label::after {
+    content: 'PROGRESS';
+    position: relative;
+    display: inline-block;
+    width: 6em;
+    color: var(--task-progress);
+    font-size: 0.5em;
+    font-weight: 800;
+    padding: 0 5px;
+    left: 0;
+    top: -0.2em;
+}
+
+.HyperMD-task-line[data-task='!'] input[type='checkbox'] {
+    background-color: var(--task-priority) !important;
+    border-color: var(--task-priority) !important;
+}
+
+.HyperMD-task-line[data-task='!'] label.task-list-label::after {
+    content: 'PRIORITY';
+    position: relative;
+    display: inline-block;
+    width: 6em;
+    color: var(--task-priority);
+    font-size: 0.5em;
+    font-weight: 800;
+    padding: 0 5px;
+    left: 0;
+    top: -0.2em;
+}
+
+.HyperMD-task-line[data-task='-'] {
+    color: var(--task-muted-text) !important;
+    text-decoration: line-through wavy var(--task-underline-cancelled) 0.02em !important;
+}
+
+.HyperMD-task-line[data-task='-'] input[type='checkbox'] {
+    background-color: var(--task-cancelled) !important;
+    border-color: var(--task-cancelled) !important;
+}
+
+.HyperMD-task-line[data-task='-'] label.task-list-label::after {
+    content: 'CANCELLED';
+    position: relative;
+    display: inline-block;
+    width: 6em;
+    color: var(--task-cancelled);
+    font-size: 0.5em;
+    font-weight: 800;
+    padding: 0 5px;
+    left: 0;
+    top: -0.2em;
+}
+
+.HyperMD-task-line[data-task='x'] {
+    color: var(--task-muted-text) !important;
+    text-decoration: line-through wavy var(--task-underline-done) 0.02em !important;
+}
+
+.HyperMD-task-line[data-task='x'] input[type='checkbox'] {
+    background-color: var(--task-done) !important;
+    border-color: var(--task-done) !important;
+}
+
+.HyperMD-task-line[data-task='x'] label.task-list-label::after {
+    content: 'DONE';
+    position: relative;
+    display: inline-block;
+    width: 6em;
+    color: var(--task-done);
+    font-size: 0.5em;
+    font-weight: 800;
+    padding: 0 5px;
+    left: 0;
+    top: -0.2em;
+}
+
+.HyperMD-task-line[data-task='*'] {
+    color: var(--task-muted-text) !important;
+}
+
+.HyperMD-task-line[data-task='*'] input[type='checkbox'] {
+    background-color: var(--task-standby) !important;
+    border-color: var(--task-standby) !important;
+}
+
+.HyperMD-task-line[data-task='*'] label.task-list-label::after {
+    content: 'STANDBY';
+    position: relative;
+    display: inline-block;
+    width: 6em;
+    color: var(--task-standby);
+    font-size: 0.5em;
+    font-weight: 800;
+    padding: 0 5px;
+    left: 0;
+    top: -0.2em;
+}
