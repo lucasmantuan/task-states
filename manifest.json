@@ -1,10 +1,10 @@
 {
-  "id": "task-states",
-  "name": "Task States",
-  "version": "0.0.1",
-  "minAppVersion": "1.0.0",
-  "description": "Gerencie estados de tarefas no Obsidian",
-  "author": "Lucas",
-  "authorUrl": "",
-  "isDesktopOnly": false
+    "id": "task-states",
+    "name": "Task States",
+    "version": "0.0.1",
+    "minAppVersion": "1.0.0",
+    "description": "Cicla estados de tarefas ao clicar em checkboxes no Obsidian",
+    "author": "Lucas Mantuan",
+    "authorUrl": "",
+    "isDesktopOnly": false
 }
