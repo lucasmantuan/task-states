@@ -2,7 +2,6 @@ const { Plugin, MarkdownView } = require('obsidian');
 
 const EVENT_TYPE = 'pointerdown';
 const CAPTURE = true;
-const DEDUPE_WINDOW_MS = 250;
 const CHECKBOX_SELECTOR = 'input.task-list-item-checkbox';
 
 const TASK_LINE_PATTERN = /^(\s*(?:>\s*)*[-*+]\s*)\[([^\]]*)\]/;
@@ -18,14 +17,14 @@ const getComposedPath = (ev) => {
     return ev?.target ? [ev.target] : [];
 };
 
-const parseDataLine = (raw) => {
+const parseLineFromDataLine = (raw) => {
     if (raw == null) return null;
     const n = Number.parseInt(String(raw), 10);
     if (!Number.isFinite(n) || n < 0) return null;
     return n;
 };
 
-const parseSourcepos = (raw) => {
+const parseLineFromSourcepos = (raw) => {
     if (raw == null) return null;
     const match = String(raw)
         .trim()
@@ -34,20 +33,6 @@ const parseSourcepos = (raw) => {
     const lineOneBased = Number.parseInt(match[1], 10);
     if (!Number.isFinite(lineOneBased) || lineOneBased < 1) return null;
     return lineOneBased - 1;
-};
-
-const getDataLineRaw = (el) => {
-    if (!isElement(el)) return null;
-    const raw = el.dataset?.line;
-    return typeof raw === 'string' && raw.length > 0 ? raw : null;
-};
-
-const getSourceposRaw = (el) => {
-    if (!isElement(el)) return null;
-    const fromDataset = el.dataset?.sourcepos;
-    if (typeof fromDataset === 'string' && fromDataset.length > 0) return fromDataset;
-    const fromAttr = el.getAttribute?.('data-sourcepos');
-    return typeof fromAttr === 'string' && fromAttr.length > 0 ? fromAttr : null;
 };
 
 const isMarkdownView = (view) => {
@@ -123,65 +108,21 @@ const resolveMarkdownView = (app) => {
     return null;
 };
 
-const resolveLineFromSections = (view, checkboxEl) => {
-    const candidates = [
-        view?.previewMode?.renderer?.sections,
-        view?.previewMode?.sections,
-        view?.currentMode?.renderer?.sections
+const resolveLine = (checkboxEl) => {
+    const dataLineCandidates = [
+        checkboxEl?.dataset?.line ?? null,
+        checkboxEl?.closest?.('[data-line]')?.dataset?.line ?? null
     ];
 
-    for (const sections of candidates) {
-        if (!Array.isArray(sections)) continue;
-
-        for (const section of sections) {
-            const sectionEl = section?.el;
-            if (!isElement(sectionEl)) continue;
-            if (!sectionEl.contains(checkboxEl) && sectionEl !== checkboxEl) continue;
-
-            const lineStart = Number.parseInt(String(section?.lineStart), 10);
-            if (Number.isFinite(lineStart) && lineStart >= 0) return lineStart;
-        }
-    }
-
-    return null;
-};
-
-const resolveLine = (view, checkboxEl, path) => {
-    const inputDataLineRaw = getDataLineRaw(checkboxEl);
-    const inputDataLine = parseDataLine(inputDataLineRaw);
-    if (inputDataLine != null) return inputDataLine;
-
-    const closestDataLineEl = checkboxEl?.closest?.('[data-line]') ?? null;
-    const closestDataLineRaw = getDataLineRaw(closestDataLineEl);
-    const closestDataLine = parseDataLine(closestDataLineRaw);
-    if (closestDataLine != null) return closestDataLine;
-
-    for (const node of path) {
-        const raw = getDataLineRaw(node);
-        const line = parseDataLine(raw);
+    for (const raw of dataLineCandidates) {
+        const line = parseLineFromDataLine(raw);
         if (line != null) return line;
     }
 
-    const sourceposCandidates = [];
+    const sourceposEl = checkboxEl?.closest?.('[data-sourcepos]') ?? checkboxEl ?? null;
+    const sourceposRaw = sourceposEl?.dataset?.sourcepos ?? sourceposEl?.getAttribute?.('data-sourcepos') ?? null;
 
-    const inputSourceposRaw = getSourceposRaw(checkboxEl);
-    if (inputSourceposRaw != null) sourceposCandidates.push(inputSourceposRaw);
-
-    const closestSourceEl = checkboxEl?.closest?.('[data-sourcepos]') ?? null;
-    const closestSourceRaw = getSourceposRaw(closestSourceEl);
-    if (closestSourceRaw != null) sourceposCandidates.push(closestSourceRaw);
-
-    for (const node of path) {
-        const raw = getSourceposRaw(node);
-        if (raw != null) sourceposCandidates.push(raw);
-    }
-
-    for (const raw of sourceposCandidates) {
-        const line = parseSourcepos(raw);
-        if (line != null) return line;
-    }
-
-    return resolveLineFromSections(view, checkboxEl);
+    return parseLineFromSourcepos(sourceposRaw);
 };
 
 const buildCandidateIndexes = (lines, lineZeroBased, taskTextPreview) => {
@@ -261,10 +202,6 @@ module.exports = class TaskStatesPlugin extends Plugin {
     constructor(app, manifest) {
         super(app, manifest);
         this._handler = null;
-        this._lastHandled = {
-            timeMs: 0,
-            checkboxEl: null
-        };
     }
 
     async onload() {
@@ -284,16 +221,7 @@ module.exports = class TaskStatesPlugin extends Plugin {
             ev.preventDefault();
             ev.stopImmediatePropagation();
 
-            const now = Date.now();
-            const last = this._lastHandled;
-            if (last.checkboxEl === checkboxEl && now - last.timeMs <= DEDUPE_WINDOW_MS) return;
-
-            this._lastHandled = {
-                timeMs: now,
-                checkboxEl
-            };
-
-            const lineNo = resolveLine(view, checkboxEl, path);
+            const lineNo = resolveLine(checkboxEl);
             if (lineNo == null) return;
 
             await toggleTaskAtLine(this.app, view, lineNo, getTaskTextPreview(checkboxEl));
@@ -307,10 +235,5 @@ module.exports = class TaskStatesPlugin extends Plugin {
             document.removeEventListener(EVENT_TYPE, this._handler, CAPTURE);
             this._handler = null;
         }
-
-        this._lastHandled = {
-            timeMs: 0,
-            checkboxEl: null
-        };
     }
 };
