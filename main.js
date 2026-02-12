@@ -54,7 +54,7 @@ module.exports = class TaskStatesPlugin extends Plugin {
         };
 
         document.addEventListener('click', this._handler, true);
-        console.log('Task States plugin carregado');
+        console.log('Task States Plugin Carregado');
     }
 
     onunload() {
@@ -62,6 +62,6 @@ module.exports = class TaskStatesPlugin extends Plugin {
             document.removeEventListener('click', this._handler, true);
             this._handler = null;
         }
-        console.log('Listener removido.');
+        console.log('Task States Plugin Descarregado');
     }
 };
