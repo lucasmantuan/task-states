@@ -18,13 +18,6 @@ const getComposedPath = (ev) => {
     return ev?.target ? [ev.target] : [];
 };
 
-const getElementFromPath = (path) => {
-    for (const node of path) {
-        if (isElement(node)) return node;
-    }
-    return null;
-};
-
 const parseDataLine = (raw) => {
     if (raw == null) return null;
     const n = Number.parseInt(String(raw), 10);
@@ -115,7 +108,7 @@ const findCheckboxFromEvent = (ev, path) => {
     return null;
 };
 
-const resolveMarkdownView = (app, eventPath) => {
+const resolveMarkdownView = (app) => {
     const workspace = app?.workspace ?? null;
     if (!workspace) return null;
 
@@ -125,19 +118,6 @@ const resolveMarkdownView = (app, eventPath) => {
     if (MarkdownView && typeof workspace.getActiveViewOfType === 'function') {
         const typedView = workspace.getActiveViewOfType(MarkdownView);
         if (isMarkdownView(typedView)) return typedView;
-    }
-
-    const eventEl = getElementFromPath(eventPath);
-    if (!eventEl || typeof workspace.getLeavesOfType !== 'function') return null;
-
-    const markdownLeaves = workspace.getLeavesOfType('markdown') ?? [];
-    for (const leaf of markdownLeaves) {
-        const view = leaf?.view ?? null;
-        if (!isMarkdownView(view)) continue;
-        const containerEl = view?.containerEl ?? leaf?.containerEl ?? null;
-        if (isElement(containerEl) && (containerEl === eventEl || containerEl.contains(eventEl))) {
-            return view;
-        }
     }
 
     return null;
@@ -298,7 +278,7 @@ module.exports = class TaskStatesPlugin extends Plugin {
             const checkboxEl = findCheckboxFromEvent(ev, path);
             if (!checkboxEl) return;
 
-            const view = resolveMarkdownView(this.app, path);
+            const view = resolveMarkdownView(this.app);
             if (!view || !isReadingView(view)) return;
 
             ev.preventDefault();
