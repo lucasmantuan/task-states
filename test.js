@@ -78,50 +78,6 @@ const getViewMode = (view) => {
 
 const isReadingView = (view) => getViewMode(view) === 'preview';
 
-const getEditor = (app) => {
-    const leaf = app?.workspace?.activeLeaf;
-    const view = leaf?.view;
-    if (!view || typeof view.getViewType !== 'function') return null;
-    if (view.getViewType() !== 'markdown') return null;
-
-    const candidates = [
-        view.editor ?? null,
-        view.sourceMode?.cmEditor ?? null,
-        view.sourceMode?.editor ?? null,
-        view.currentMode?.editor ?? null
-    ];
-
-    for (const editor of candidates) {
-        if (!editor) continue;
-        if (
-            typeof editor.getLine === 'function' &&
-            (typeof editor.setLine === 'function' || typeof editor.replaceRange === 'function')
-        ) {
-            return editor;
-        }
-    }
-
-    return null;
-};
-
-const setLine = (editor, lineNo, newText) => {
-    if (!editor) return false;
-
-    if (typeof editor.setLine === 'function') {
-        editor.setLine(lineNo, newText);
-        return true;
-    }
-
-    if (typeof editor.replaceRange === 'function' && typeof editor.getLine === 'function') {
-        const old = editor.getLine(lineNo);
-        if (typeof old !== 'string') return false;
-        editor.replaceRange(newText, { line: lineNo, ch: 0 }, { line: lineNo, ch: old.length });
-        return true;
-    }
-
-    return false;
-};
-
 const toggleMarker = (text) => {
     const value = String(text ?? '');
     const match = value.match(TASK_LINE_PATTERN);
@@ -318,22 +274,10 @@ const toggleTaskAtLineViaVault = async (app, view, lineZeroBased, taskTextPrevie
 
 const toggleTaskAtLine = async (app, view, lineZeroBased, taskTextPreview) => {
     if (!Number.isFinite(lineZeroBased) || lineZeroBased < 0) return false;
-
-    const editor = getEditor(app);
-    if (editor) {
-        const current = editor.getLine(lineZeroBased);
-        if (typeof current === 'string') {
-            const updated = toggleMarker(current);
-            if (updated !== current && setLine(editor, lineZeroBased, updated)) {
-                return true;
-            }
-        }
-    }
-
     return toggleTaskAtLineViaVault(app, view, lineZeroBased, taskTextPreview);
 };
 
-class TaskStatesPlugin extends Plugin {
+module.exports = class TaskStatesPlugin extends Plugin {
     constructor(app, manifest) {
         super(app, manifest);
         this._handler = null;
@@ -389,6 +333,4 @@ class TaskStatesPlugin extends Plugin {
             checkboxEl: null
         };
     }
-}
-
-module.exports = TaskStatesPlugin;
+};
