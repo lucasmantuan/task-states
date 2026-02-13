@@ -1,10 +1,10 @@
 {
     "id": "task-states",
     "name": "Task States",
-    "version": "0.0.1",
+    "version": "0.0.3",
     "minAppVersion": "1.0.0",
-    "description": "Cicla estados de tarefas ao clicar em checkboxes no Obsidian",
+    "description": "Toggle task states by clicking the checkbox, cycling through TODO, STANDBY, DONE, CANCELLED, PRIORITY and PROGRESS directly in Markdown task lists.",
     "author": "Lucas Mantuan",
-    "authorUrl": "",
+    "authorUrl": "https://www.lucasmantuan.com.br",
     "isDesktopOnly": false
 }
