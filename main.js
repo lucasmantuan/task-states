@@ -36,20 +36,15 @@ module.exports = class TaskStatesPlugin extends Plugin {
             const t = ev.target;
             if (!(t instanceof HTMLInputElement)) return;
             if (!t.classList.contains('task-list-item-checkbox')) return;
-
             const editor = getEditor(this.app);
             if (!editor || typeof editor.posAtCoords !== 'function') return;
-
             ev.preventDefault();
             ev.stopImmediatePropagation();
-
             const pos = editor.posAtCoords(ev.clientX, ev.clientY);
             if (!pos || typeof pos.line !== 'number') return;
-
             const lineNo = pos.line;
             const current = editor.getLine(lineNo);
             const updated = toggleMarker(current);
-
             if (updated !== current) setLine(editor, lineNo, updated);
         };
 
