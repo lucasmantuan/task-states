@@ -1,42 +1,42 @@
 const { Plugin } = require('obsidian');
 
 /** Seletores e eventos de interação no DOM. */
-const CAPTURE_PHASE = true;
-const CHECKBOX_SELECTOR = 'input.task-list-item-checkbox';
-const CLICK_EVENT = 'click';
-const DATA_LINE_SELECTOR = '[data-line]';
-const LIST_ITEM_SELECTOR = 'li';
-const LIST_ITEM_TASK_SELECTOR = 'li.task-list-item';
-const POINTER_DOWN_EVENT = 'pointerdown';
+const EVENT_LISTENER_CAPTURE_PHASE = true;
+const TASK_CHECKBOX_SELECTOR = 'input.task-list-item-checkbox';
+const CLICK_EVENT_NAME = 'click';
+const DATA_LINE_ATTRIBUTE_SELECTOR = '[data-line]';
+const LIST_ITEM_TAG_SELECTOR = 'li';
+const TASK_LIST_ITEM_SELECTOR = 'li.task-list-item';
+const POINTER_DOWN_EVENT_NAME = 'pointerdown';
 
 /** Tipos e modos de view do Obsidian utilizados pelo plugin. */
-const EVENT_MODE_PREVIEW = 'preview';
-const MARKDOWN_VIEW_TYPE = 'markdown';
+const PREVIEW_VIEW_MODE = 'preview';
+const MARKDOWN_VIEW_TYPE_NAME = 'markdown';
 
 /** Literais de texto e separadores reutilizados. */
-const ELLIPSIS = '...';
-const EMPTY_STRING = '';
-const EOL_UNIX = '\n';
-const EOL_WINDOWS = '\r\n';
-const SINGLE_SPACE = ' ';
-const TOKEN_SEPARATOR = ' ';
+const ELLIPSIS_SUFFIX = '...';
+const EMPTY_TEXT = '';
+const UNIX_EOL_SEQUENCE = '\n';
+const WINDOWS_EOL_SEQUENCE = '\r\n';
+const SPACE_CHARACTER = ' ';
+const TOKEN_SEPARATOR_CHARACTER = ' ';
 
 /** Regex de parsing e normalizacao de markdown. */
-const BOLD_ASTERISKS_RE = /\*\*([^*]+)\*\*/g;
-const BOLD_UNDERSCORES_RE = /__([^_]+)__/g;
-const COMMON_RESIDUE_RE = /[>*#]/g;
-const INLINE_CODE_RE = /`([^`]+)`/g;
-const ITALIC_ASTERISKS_RE = /\*([^*]+)\*/g;
-const ITALIC_UNDERSCORES_RE = /_([^_]+)_/g;
+const BOLD_ASTERISK_MARKDOWN_RE = /\*\*([^*]+)\*\*/g;
+const BOLD_UNDERSCORE_MARKDOWN_RE = /__([^_]+)__/g;
+const MARKDOWN_RESIDUAL_SYMBOL_RE = /[>*#]/g;
+const INLINE_CODE_MARKDOWN_RE = /`([^`]+)`/g;
+const ITALIC_ASTERISK_MARKDOWN_RE = /\*([^*]+)\*/g;
+const ITALIC_UNDERSCORE_MARKDOWN_RE = /_([^_]+)_/g;
 const LEADING_WHITESPACE_RE = /^\s*/;
 const LINE_SPLIT_RE = /\r?\n/;
-const LIST_ITEM_RE = /^\s*(?:>\s*)*[-*+]\s+/;
-const MD_HEADING_RE = /^\s{0,3}#{1,6}\s+/;
-const MD_LINK_RE = /\[([^\]]+)\]\([^)]+\)/g;
-const NBSP_RE = /\u00A0/g;
-const TASK_LINE_PATTERN_RE = /^(\s*(?:>\s*)*[-*+]\s*)\[([^\]]*)\]/;
-const TASK_PREFIX_RE = /^\s*(?:>\s*)*[-*+]\s*\[[^\]]*\]\s*/;
-const WHITESPACE_RE = /\s+/g;
+const MARKDOWN_LIST_ITEM_PREFIX_RE = /^\s*(?:>\s*)*[-*+]\s+/;
+const MARKDOWN_HEADING_PREFIX_RE = /^\s{0,3}#{1,6}\s+/;
+const MARKDOWN_LINK_RE = /\[([^\]]+)\]\([^)]+\)/g;
+const NON_BREAKING_SPACE_RE = /\u00A0/g;
+const TASK_MARKER_LINE_RE = /^(\s*(?:>\s*)*[-*+]\s*)\[([^\]]*)\]/;
+const TASK_MARKER_PREFIX_RE = /^\s*(?:>\s*)*[-*+]\s*\[[^\]]*\]\s*/;
+const WHITESPACE_SEQUENCE_RE = /\s+/g;
 const WIKI_LINK_RE = /\[\[([^\]]+)\]\]/g;
 const WIKI_LINK_WITH_ALIAS_RE = /\[\[([^\]|]+)\|([^\]]+)\]\]/g;
 
@@ -44,128 +44,134 @@ const WIKI_LINK_WITH_ALIAS_RE = /\[\[([^\]|]+)\|([^\]]+)\]\]/g;
 const CONTAINS_MATCH_BASE_SCORE = 7000;
 const EXACT_MATCH_SCORE = 10000;
 const FALLBACK_FULL_SCAN_MIN_SCORE = 1500;
-const LINE_PARSE_RADIX = 10;
-const MARKER_SEQUENCE = ['*', 'x', '-', '!', '>', ' '];
-const TASK_PREVIEW_MAX_LENGTH = 300;
-const TOKEN_MATCH_SCORE_MULTIPLIER = 5000;
-const TRY_WINDOWS = [
-    { before: 50, after: 150 },
-    { before: 200, after: 600 },
-    { before: 600, after: 1200 }
+const DECIMAL_RADIX = 10;
+const TASK_STATUS_MARKER_SEQUENCE = ['*', 'x', '-', '!', '>', ' '];
+const PREVIEW_TEXT_MAX_LENGTH = 300;
+const JACCARD_SCORE_MULTIPLIER = 5000;
+const TASK_SEARCH_WINDOWS = [
+    { linesBefore: 50, linesAfter: 150 },
+    { linesBefore: 200, linesAfter: 600 },
+    { linesBefore: 600, linesAfter: 1200 }
 ];
 
 /** Normaliza texto para comparacoes, removendo espacos duplicados e NBSP. */
-const normalize = (string) => {
-    const normalized = String(string ?? '')
-        .replace(NBSP_RE, SINGLE_SPACE)
-        .replace(WHITESPACE_RE, SINGLE_SPACE)
+const normalizeTextForComparison = (inputValue) => {
+    const normalizedComparisonText = String(inputValue ?? EMPTY_TEXT)
+        .replace(NON_BREAKING_SPACE_RE, SPACE_CHARACTER)
+        .replace(WHITESPACE_SEQUENCE_RE, SPACE_CHARACTER)
         .trim();
 
-    return normalized;
+    return normalizedComparisonText;
 };
 
 /** Converte o valor de `data-line` para indice numerico valido (>= 0). */
-const parseLineFromDataLine = (raw) => {
-    if (raw == null) {
+const parseDataLineToLineNumber = (rawDataLineValue) => {
+    if (rawDataLineValue == null) {
         return null;
     }
 
-    const n = Number.parseInt(String(raw), LINE_PARSE_RADIX);
+    const parsedLineNumber = Number.parseInt(String(rawDataLineValue), DECIMAL_RADIX);
 
-    if (!Number.isFinite(n) || n < 0) {
+    if (!Number.isFinite(parsedLineNumber) || parsedLineNumber < 0) {
         return null;
     }
 
-    return n;
+    return parsedLineNumber;
 };
 
 /** Verifica se a view recebida é uma view Markdown do Obsidian. */
-const isMarkdownView = (view) => {
-    if (!view) {
+const isMarkdownViewInstance = (viewCandidate) => {
+    if (!viewCandidate) {
         return false;
     }
 
-    if (typeof view.getViewType === 'function') {
-        return view.getViewType() === MARKDOWN_VIEW_TYPE;
+    if (typeof viewCandidate.getViewType === 'function') {
+        return viewCandidate.getViewType() === MARKDOWN_VIEW_TYPE_NAME;
     }
 
-    return view.viewType === MARKDOWN_VIEW_TYPE || view.type === MARKDOWN_VIEW_TYPE;
+    return viewCandidate.viewType === MARKDOWN_VIEW_TYPE_NAME || viewCandidate.type === MARKDOWN_VIEW_TYPE_NAME;
 };
 
 /** Descobre o modo atual da view Markdown (preview/live/source). */
-const resolveViewMode = (view) => {
-    if (!view) {
+const resolveMarkdownViewMode = (markdownView) => {
+    if (!markdownView) {
         return null;
     }
 
-    if (typeof view.getMode === 'function') {
-        return view.getMode();
+    if (typeof markdownView.getMode === 'function') {
+        return markdownView.getMode();
     }
 
-    if (typeof view.getState === 'function') {
-        return view.getState()?.mode ?? null;
+    if (typeof markdownView.getState === 'function') {
+        return markdownView.getState()?.mode ?? null;
     }
 
-    if (typeof view.currentMode?.getMode === 'function') {
-        return view.currentMode.getMode();
+    if (typeof markdownView.currentMode?.getMode === 'function') {
+        return markdownView.currentMode.getMode();
     }
 
-    return view.currentMode?.mode ?? null;
+    return markdownView.currentMode?.mode ?? null;
 };
 
 /** Recupera a view Markdown ativa do workspace. */
-const resolveMarkdownView = (app) => {
-    const view = app?.workspace?.activeLeaf?.view ?? null;
+const resolveActiveMarkdownView = (obsidianApp) => {
+    const activeViewCandidate = obsidianApp?.workspace?.activeLeaf?.view ?? null;
 
-    if (isMarkdownView(view)) {
-        return view;
+    if (isMarkdownViewInstance(activeViewCandidate)) {
+        return activeViewCandidate;
     }
 
     return null;
 };
 
 /** Identifica se o evento veio de um checkbox de tarefa válido. */
-const findCheckboxFromEvent = (ev) => {
-    const target = ev?.target;
+const resolveTaskCheckboxFromEvent = (domEvent) => {
+    const eventTargetElement = domEvent?.target;
 
-    if (target instanceof Element && target.matches?.(CHECKBOX_SELECTOR)) {
-        return target;
+    if (eventTargetElement instanceof Element && eventTargetElement.matches?.(TASK_CHECKBOX_SELECTOR)) {
+        return eventTargetElement;
     }
 
     return null;
 };
 
 /** Extrai uma versao curta do texto renderizado da tarefa no preview. */
-const getTaskTextPreview = (checkboxEl) => {
-    const li = checkboxEl?.closest?.(LIST_ITEM_TASK_SELECTOR) ?? checkboxEl?.closest?.(LIST_ITEM_SELECTOR) ?? null;
-    const text = li?.innerText?.trim() ?? null;
+const extractTaskPreviewText = (taskCheckboxElement) => {
+    const taskListItemElement =
+        taskCheckboxElement?.closest?.(TASK_LIST_ITEM_SELECTOR) ??
+        taskCheckboxElement?.closest?.(LIST_ITEM_TAG_SELECTOR) ??
+        null;
+    const renderedTaskText = taskListItemElement?.innerText?.trim() ?? null;
 
-    if (!text) {
+    if (!renderedTaskText) {
         return null;
     }
 
-    if (text.length > TASK_PREVIEW_MAX_LENGTH) {
-        return `${text.slice(0, TASK_PREVIEW_MAX_LENGTH - ELLIPSIS.length)}${ELLIPSIS}`;
+    if (renderedTaskText.length > PREVIEW_TEXT_MAX_LENGTH) {
+        return `${renderedTaskText.slice(0, PREVIEW_TEXT_MAX_LENGTH - ELLIPSIS_SUFFIX.length)}${ELLIPSIS_SUFFIX}`;
     }
 
-    return text;
+    return renderedTaskText;
 };
 
 /** Resolve a linha aproximada da tarefa com base em atributos `data-line`. */
-const resolveApproxLineFromPreviewCheckbox = (checkboxEl) => {
-    const li = checkboxEl?.closest?.(LIST_ITEM_TASK_SELECTOR) ?? checkboxEl?.closest?.(LIST_ITEM_SELECTOR) ?? null;
+const resolveApproximateLineFromPreviewCheckbox = (taskCheckboxElement) => {
+    const taskListItemElement =
+        taskCheckboxElement?.closest?.(TASK_LIST_ITEM_SELECTOR) ??
+        taskCheckboxElement?.closest?.(LIST_ITEM_TAG_SELECTOR) ??
+        null;
 
-    const candidates = [
-        checkboxEl?.dataset?.line ?? null,
-        li?.dataset?.line ?? null,
-        checkboxEl?.closest?.(DATA_LINE_SELECTOR)?.dataset?.line ?? null
+    const candidateDataLineValues = [
+        taskCheckboxElement?.dataset?.line ?? null,
+        taskListItemElement?.dataset?.line ?? null,
+        taskCheckboxElement?.closest?.(DATA_LINE_ATTRIBUTE_SELECTOR)?.dataset?.line ?? null
     ];
 
-    for (const raw of candidates) {
-        const line = parseLineFromDataLine(raw);
+    for (const rawDataLineValue of candidateDataLineValues) {
+        const parsedLineNumber = parseDataLineToLineNumber(rawDataLineValue);
 
-        if (line != null) {
-            return line;
+        if (parsedLineNumber != null) {
+            return parsedLineNumber;
         }
     }
 
@@ -173,228 +179,232 @@ const resolveApproxLineFromPreviewCheckbox = (checkboxEl) => {
 };
 
 /** Remove sintaxe markdown comum para comparar apenas o texto "plano" da tarefa. */
-const stripMarkdownLikePreview = (md) => {
-    let normalizedText = String(md ?? EMPTY_STRING);
+const stripMarkdownFormattingFromPreviewText = (markdownPreviewText) => {
+    let plainPreviewText = String(markdownPreviewText ?? EMPTY_TEXT);
 
-    normalizedText = normalizedText.replace(TASK_PREFIX_RE, '');
-    normalizedText = normalizedText.replace(WIKI_LINK_WITH_ALIAS_RE, '$2');
-    normalizedText = normalizedText.replace(WIKI_LINK_RE, '$1');
-    normalizedText = normalizedText.replace(MD_LINK_RE, '$1');
-    normalizedText = normalizedText.replace(INLINE_CODE_RE, '$1');
-    normalizedText = normalizedText.replace(BOLD_ASTERISKS_RE, '$1');
-    normalizedText = normalizedText.replace(BOLD_UNDERSCORES_RE, '$1');
-    normalizedText = normalizedText.replace(ITALIC_ASTERISKS_RE, '$1');
-    normalizedText = normalizedText.replace(ITALIC_UNDERSCORES_RE, '$1');
-    normalizedText = normalizedText.replace(COMMON_RESIDUE_RE, SINGLE_SPACE);
+    plainPreviewText = plainPreviewText.replace(TASK_MARKER_PREFIX_RE, EMPTY_TEXT);
+    plainPreviewText = plainPreviewText.replace(WIKI_LINK_WITH_ALIAS_RE, '$2');
+    plainPreviewText = plainPreviewText.replace(WIKI_LINK_RE, '$1');
+    plainPreviewText = plainPreviewText.replace(MARKDOWN_LINK_RE, '$1');
+    plainPreviewText = plainPreviewText.replace(INLINE_CODE_MARKDOWN_RE, '$1');
+    plainPreviewText = plainPreviewText.replace(BOLD_ASTERISK_MARKDOWN_RE, '$1');
+    plainPreviewText = plainPreviewText.replace(BOLD_UNDERSCORE_MARKDOWN_RE, '$1');
+    plainPreviewText = plainPreviewText.replace(ITALIC_ASTERISK_MARKDOWN_RE, '$1');
+    plainPreviewText = plainPreviewText.replace(ITALIC_UNDERSCORE_MARKDOWN_RE, '$1');
+    plainPreviewText = plainPreviewText.replace(MARKDOWN_RESIDUAL_SYMBOL_RE, SPACE_CHARACTER);
 
-    return normalize(normalizedText);
+    return normalizeTextForComparison(plainPreviewText);
 };
 
-/** Le o arquivo ativo e devolve linhas + EOL detectado para escrita segura. */
-const readFileLines = async (app, view) => {
-    const file = view?.file ?? null;
-    const vault = app?.vault;
+/** Lê o arquivo ativo e devolve linhas mais EOL detectado para escrita segura. */
+const readActiveFileSnapshot = async (obsidianApp, markdownView) => {
+    const activeFile = markdownView?.file ?? null;
+    const appVault = obsidianApp?.vault;
 
-    if (!file || typeof vault?.cachedRead !== 'function' || typeof vault?.modify !== 'function') {
+    if (!activeFile || typeof appVault?.cachedRead !== 'function' || typeof appVault?.modify !== 'function') {
         return null;
     }
 
-    const content = await vault.cachedRead(file);
-    const text = String(content);
-    const eol = text.includes(EOL_WINDOWS) ? EOL_WINDOWS : EOL_UNIX;
-    const lines = text.split(LINE_SPLIT_RE);
+    const fileContent = await appVault.cachedRead(activeFile);
+    const fileText = String(fileContent);
+    const endOfLineSequence = fileText.includes(WINDOWS_EOL_SEQUENCE) ? WINDOWS_EOL_SEQUENCE : UNIX_EOL_SEQUENCE;
+    const fileLines = fileText.split(LINE_SPLIT_RE);
 
-    return { file, vault, eol, lines };
+    return { activeFile, appVault, endOfLineSequence, fileLines };
 };
 
 /** Cicla o marcador da tarefa na ordem definida pelo plugin. */
-const toggleMarker = (text) => {
-    const value = String(text ?? EMPTY_STRING);
-    const match = value.match(TASK_LINE_PATTERN_RE);
+const toggleTaskMarkerInLine = (taskLineText) => {
+    const taskLineValue = String(taskLineText ?? EMPTY_TEXT);
+    const taskMarkerMatch = taskLineValue.match(TASK_MARKER_LINE_RE);
 
-    if (!match) {
-        return value;
+    if (!taskMarkerMatch) {
+        return taskLineValue;
     }
 
-    const prefix = match[1];
-    const marker = match[2];
-    const index = MARKER_SEQUENCE.indexOf(marker);
-    const next = index === -1 ? MARKER_SEQUENCE[0] : MARKER_SEQUENCE[(index + 1) % MARKER_SEQUENCE.length];
+    const taskListPrefix = taskMarkerMatch[1];
+    const currentTaskMarker = taskMarkerMatch[2];
+    const currentMarkerIndex = TASK_STATUS_MARKER_SEQUENCE.indexOf(currentTaskMarker);
+    const nextTaskMarker =
+        currentMarkerIndex === -1
+            ? TASK_STATUS_MARKER_SEQUENCE[0]
+            : TASK_STATUS_MARKER_SEQUENCE[(currentMarkerIndex + 1) % TASK_STATUS_MARKER_SEQUENCE.length];
 
-    return value.replace(TASK_LINE_PATTERN_RE, `${prefix}[${next}]`);
+    return taskLineValue.replace(TASK_MARKER_LINE_RE, `${taskListPrefix}[${nextTaskMarker}]`);
 };
 
-/** Junta o bloco da tarefa (linha base + continuacoes) para comparacao textual. */
-const joinTaskBlockForComparison = (lines, idx) => {
-    const base = lines[idx];
+/** Junta o bloco da tarefa (linha base + continuacoes) para comparação textual. */
+const buildTaskBlockTextForComparison = (fileLines, taskStartLineIndex) => {
+    const baseTaskLine = fileLines[taskStartLineIndex];
 
-    if (!TASK_PREFIX_RE.test(base)) {
-        return base;
+    if (!TASK_MARKER_PREFIX_RE.test(baseTaskLine)) {
+        return baseTaskLine;
     }
 
-    const baseIndent = (base.match(LEADING_WHITESPACE_RE) ?? [EMPTY_STRING])[0].length;
-    const parts = [base];
+    const baseLineIndent = (baseTaskLine.match(LEADING_WHITESPACE_RE) ?? [EMPTY_TEXT])[0].length;
+    const taskBlockLines = [baseTaskLine];
 
-    for (let j = idx + 1; j < lines.length; j += 1) {
-        const ln = lines[j];
+    for (let j = taskStartLineIndex + 1; j < fileLines.length; j += 1) {
+        const continuationLine = fileLines[j];
 
-        if (!ln) {
+        if (!continuationLine) {
             break;
         }
 
-        const indent = (ln.match(LEADING_WHITESPACE_RE) ?? [EMPTY_STRING])[0].length;
+        const continuationLineIndent = (continuationLine.match(LEADING_WHITESPACE_RE) ?? [EMPTY_TEXT])[0].length;
 
-        if (indent <= baseIndent && LIST_ITEM_RE.test(ln)) {
+        if (continuationLineIndent <= baseLineIndent && MARKDOWN_LIST_ITEM_PREFIX_RE.test(continuationLine)) {
             break;
         }
 
-        if (MD_HEADING_RE.test(ln)) {
+        if (MARKDOWN_HEADING_PREFIX_RE.test(continuationLine)) {
             break;
         }
 
-        parts.push(ln);
+        taskBlockLines.push(continuationLine);
     }
 
-    return parts.join(SINGLE_SPACE);
+    return taskBlockLines.join(SPACE_CHARACTER);
 };
 
 /** Calcula score de similaridade entre texto candidato e texto esperado. */
-const scoreMatch = (candidatePlain, expectedPlain) => {
-    if (!candidatePlain || !expectedPlain) {
+const calculateMatchScore = (candidatePlainText, expectedPlainText) => {
+    if (!candidatePlainText || !expectedPlainText) {
         return 0;
     }
 
-    if (candidatePlain === expectedPlain) {
+    if (candidatePlainText === expectedPlainText) {
         return EXACT_MATCH_SCORE;
     }
 
-    if (candidatePlain.includes(expectedPlain) || expectedPlain.includes(candidatePlain)) {
-        return CONTAINS_MATCH_BASE_SCORE + Math.min(candidatePlain.length, expectedPlain.length);
+    if (candidatePlainText.includes(expectedPlainText) || expectedPlainText.includes(candidatePlainText)) {
+        return CONTAINS_MATCH_BASE_SCORE + Math.min(candidatePlainText.length, expectedPlainText.length);
     }
 
-    const candTokens = candidatePlain.split(TOKEN_SEPARATOR).filter(Boolean);
-    const expTokens = expectedPlain.split(TOKEN_SEPARATOR).filter(Boolean);
+    const candidateTokens = candidatePlainText.split(TOKEN_SEPARATOR_CHARACTER).filter(Boolean);
+    const expectedTokens = expectedPlainText.split(TOKEN_SEPARATOR_CHARACTER).filter(Boolean);
 
-    if (!candTokens.length || !expTokens.length) {
+    if (!candidateTokens.length || !expectedTokens.length) {
         return 0;
     }
 
-    const candSet = new Set(candTokens);
-    const expSet = new Set(expTokens);
+    const candidateTokenSet = new Set(candidateTokens);
+    const expectedTokenSet = new Set(expectedTokens);
 
-    let inter = 0;
+    let intersectionCount = 0;
 
-    for (const tok of candSet) {
-        if (expSet.has(tok)) {
-            inter += 1;
+    for (const token of candidateTokenSet) {
+        if (expectedTokenSet.has(token)) {
+            intersectionCount += 1;
         }
     }
 
-    const union = candSet.size + expSet.size - inter;
-    const jacc = union ? inter / union : 0;
+    const unionCount = candidateTokenSet.size + expectedTokenSet.size - intersectionCount;
+    const jaccardSimilarity = unionCount ? intersectionCount / unionCount : 0;
 
-    return Math.round(jacc * TOKEN_MATCH_SCORE_MULTIPLIER);
+    return Math.round(jaccardSimilarity * JACCARD_SCORE_MULTIPLIER);
 };
 
 /** Resolve a melhor linha de tarefa candidata usando busca local e fallback global. */
-const resolveBestTaskLine = (lines, approxIdx, expectedRenderedText) => {
-    const expected = normalize(expectedRenderedText);
-    const expectedPlain = expected;
-    const approxCandidates = [approxIdx, approxIdx - 1, approxIdx + 1];
+const resolveBestMatchingTaskLine = (fileLines, approximateLineIndex, expectedRenderedTaskText) => {
+    const normalizedExpectedText = normalizeTextForComparison(expectedRenderedTaskText);
+    const nearbyLineCandidates = [approximateLineIndex, approximateLineIndex - 1, approximateLineIndex + 1];
 
-    for (const i of approxCandidates) {
-        if (!Number.isInteger(i) || i < 0 || i >= lines.length) {
+    for (const i of nearbyLineCandidates) {
+        if (!Number.isInteger(i) || i < 0 || i >= fileLines.length) {
             continue;
         }
 
-        const ln = lines[i];
+        const candidateLineText = fileLines[i];
 
-        if (!TASK_PREFIX_RE.test(ln)) {
+        if (!TASK_MARKER_PREFIX_RE.test(candidateLineText)) {
             continue;
         }
 
-        const block = joinTaskBlockForComparison(lines, i);
-        const plain = stripMarkdownLikePreview(block);
+        const taskBlockText = buildTaskBlockTextForComparison(fileLines, i);
+        const taskPlainText = stripMarkdownFormattingFromPreviewText(taskBlockText);
 
-        if (plain === expectedPlain) {
-            return { idx: i, score: EXACT_MATCH_SCORE };
+        if (taskPlainText === normalizedExpectedText) {
+            return { matchedLineIndex: i, matchScore: EXACT_MATCH_SCORE };
         }
     }
 
-    const bases = approxCandidates.filter((n) => Number.isInteger(n) && n >= 0);
+    const candidateBaseIndices = nearbyLineCandidates.filter(
+        (candidateLineIndex) => Number.isInteger(candidateLineIndex) && candidateLineIndex >= 0
+    );
 
-    let best = { idx: null, score: 0 };
+    let bestMatchResult = { matchedLineIndex: null, matchScore: 0 };
 
     /** Avalia uma linha candidata e atualiza o melhor score encontrado. */
-    const consider = (i) => {
-        const ln = lines[i];
+    const evaluateCandidateLine = (candidateLineIndex) => {
+        const candidateLineText = fileLines[candidateLineIndex];
 
-        if (!TASK_PREFIX_RE.test(ln)) {
+        if (!TASK_MARKER_PREFIX_RE.test(candidateLineText)) {
             return;
         }
 
-        const block = joinTaskBlockForComparison(lines, i);
-        const plain = stripMarkdownLikePreview(block);
-        const sc = scoreMatch(plain, expectedPlain);
+        const taskBlockText = buildTaskBlockTextForComparison(fileLines, candidateLineIndex);
+        const taskPlainText = stripMarkdownFormattingFromPreviewText(taskBlockText);
+        const candidateScore = calculateMatchScore(taskPlainText, normalizedExpectedText);
 
-        if (sc > best.score) {
-            best = { idx: i, score: sc };
+        if (candidateScore > bestMatchResult.matchScore) {
+            bestMatchResult = { matchedLineIndex: candidateLineIndex, matchScore: candidateScore };
         }
     };
 
-    for (const base of bases) {
-        for (const w of TRY_WINDOWS) {
-            const start = Math.max(0, base - w.before);
-            const end = Math.min(lines.length - 1, base + w.after);
+    for (const baseLineIndex of candidateBaseIndices) {
+        for (const searchWindow of TASK_SEARCH_WINDOWS) {
+            const startLineIndex = Math.max(0, baseLineIndex - searchWindow.linesBefore);
+            const endLineIndex = Math.min(fileLines.length - 1, baseLineIndex + searchWindow.linesAfter);
 
-            for (let i = start; i <= end; i += 1) {
-                consider(i);
+            for (let i = startLineIndex; i <= endLineIndex; i += 1) {
+                evaluateCandidateLine(i);
             }
 
-            if (best.score >= CONTAINS_MATCH_BASE_SCORE) {
-                return best;
+            if (bestMatchResult.matchScore >= CONTAINS_MATCH_BASE_SCORE) {
+                return bestMatchResult;
             }
         }
     }
 
-    if (best.score < FALLBACK_FULL_SCAN_MIN_SCORE && expectedPlain) {
-        for (let i = 0; i < lines.length; i += 1) {
-            consider(i);
+    if (bestMatchResult.matchScore < FALLBACK_FULL_SCAN_MIN_SCORE && normalizedExpectedText) {
+        for (let i = 0; i < fileLines.length; i += 1) {
+            evaluateCandidateLine(i);
         }
     }
 
-    if (best.idx == null) {
+    if (bestMatchResult.matchedLineIndex == null) {
         return null;
     }
 
-    return best;
+    return bestMatchResult;
 };
 
 /** Recupera uma instância de editor compatível com leitura/escrita de linhas. */
-const getEditor = (app) => {
-    const view = resolveMarkdownView(app);
+const resolveCompatibleEditor = (obsidianApp) => {
+    const activeMarkdownView = resolveActiveMarkdownView(obsidianApp);
 
-    if (!view) {
+    if (!activeMarkdownView) {
         return null;
     }
 
-    const candidates = [
-        view.editor ?? null,
-        view.sourceMode?.editor ?? null,
-        view.sourceMode?.cmEditor ?? null,
-        view.currentMode?.editor ?? null
+    const editorCandidates = [
+        activeMarkdownView.editor ?? null,
+        activeMarkdownView.sourceMode?.editor ?? null,
+        activeMarkdownView.sourceMode?.cmEditor ?? null,
+        activeMarkdownView.currentMode?.editor ?? null
     ];
 
-    for (const editor of candidates) {
-        if (!editor) {
+    for (const editorCandidate of editorCandidates) {
+        if (!editorCandidate) {
             continue;
         }
 
         if (
-            typeof editor.getLine === 'function' &&
-            (typeof editor.setLine === 'function' || typeof editor.replaceRange === 'function')
+            typeof editorCandidate.getLine === 'function' &&
+            (typeof editorCandidate.setLine === 'function' || typeof editorCandidate.replaceRange === 'function')
         ) {
-            return editor;
+            return editorCandidate;
         }
     }
 
@@ -402,24 +412,28 @@ const getEditor = (app) => {
 };
 
 /** Atualiza o conteúdo de uma linha no editor, independente da API exposta. */
-const setLine = (editor, lineNo, newText) => {
-    if (!editor) {
+const setEditorLineText = (editorInstance, lineNumber, updatedLineText) => {
+    if (!editorInstance) {
         return false;
     }
 
-    if (typeof editor.setLine === 'function') {
-        editor.setLine(lineNo, newText);
+    if (typeof editorInstance.setLine === 'function') {
+        editorInstance.setLine(lineNumber, updatedLineText);
         return true;
     }
 
-    if (typeof editor.replaceRange === 'function' && typeof editor.getLine === 'function') {
-        const old = editor.getLine(lineNo);
+    if (typeof editorInstance.replaceRange === 'function' && typeof editorInstance.getLine === 'function') {
+        const currentLineText = editorInstance.getLine(lineNumber);
 
-        if (typeof old !== 'string') {
+        if (typeof currentLineText !== 'string') {
             return false;
         }
 
-        editor.replaceRange(newText, { line: lineNo, ch: 0 }, { line: lineNo, ch: old.length });
+        editorInstance.replaceRange(
+            updatedLineText,
+            { line: lineNumber, ch: 0 },
+            { line: lineNumber, ch: currentLineText.length }
+        );
         return true;
     }
 
@@ -427,154 +441,159 @@ const setLine = (editor, lineNo, newText) => {
 };
 
 /** Aplica o ciclo de status no editor ativo usando a posição do clique para o modo de edição. */
-const toggleTaskAtLineViaEditor = (app, ev) => {
-    const editor = getEditor(app);
+const toggleTaskAtCursorLineInEditor = (obsidianApp, pointerEvent) => {
+    const editorInstance = resolveCompatibleEditor(obsidianApp);
 
-    if (!editor || typeof editor.posAtCoords !== 'function') {
+    if (!editorInstance || typeof editorInstance.posAtCoords !== 'function') {
         return false;
     }
 
-    const pos = editor.posAtCoords(ev.clientX, ev.clientY);
+    const cursorPosition = editorInstance.posAtCoords(pointerEvent.clientX, pointerEvent.clientY);
 
-    if (!pos || typeof pos.line !== 'number') {
+    if (!cursorPosition || typeof cursorPosition.line !== 'number') {
         return false;
     }
 
-    const lineNo = pos.line;
-    const current = editor.getLine(lineNo);
+    const lineNumber = cursorPosition.line;
+    const currentLineText = editorInstance.getLine(lineNumber);
 
-    if (typeof current !== 'string') {
+    if (typeof currentLineText !== 'string') {
         return false;
     }
 
-    const updated = toggleMarker(current);
+    const updatedLineText = toggleTaskMarkerInLine(currentLineText);
 
-    if (updated === current) {
+    if (updatedLineText === currentLineText) {
         return false;
     }
 
-    return setLine(editor, lineNo, updated);
+    return setEditorLineText(editorInstance, lineNumber, updatedLineText);
 };
 
 /** Processa o clique em edição e atualiza a linha no editor. */
-const handleEditInteraction = (app, ev) => {
-    return toggleTaskAtLineViaEditor(app, ev);
+const handleEditModeInteraction = (obsidianApp, clickEvent) => {
+    return toggleTaskAtCursorLineInEditor(obsidianApp, clickEvent);
 };
 
 module.exports = class TaskStatesPlugin extends Plugin {
     /** Registra handlers de preview e edicao para alternar estado de tarefas. */
     async onload() {
-        const app = this.app ?? globalThis.app;
+        const obsidianApp = this.app ?? globalThis.app;
 
-        if (!app) {
+        if (!obsidianApp) {
             return;
         }
 
         /** Handler do preview: localiza a linha real da tarefa e grava no arquivo. */
-        this._previewHandler = async (ev) => {
-            const checkboxEl = findCheckboxFromEvent(ev);
+        this._onPreviewPointerDown = async (pointerEvent) => {
+            const taskCheckboxElement = resolveTaskCheckboxFromEvent(pointerEvent);
 
-            if (!checkboxEl) {
+            if (!taskCheckboxElement) {
                 return;
             }
 
-            const view = resolveMarkdownView(app);
+            const activeMarkdownView = resolveActiveMarkdownView(obsidianApp);
 
-            if (!view) {
+            if (!activeMarkdownView) {
                 return;
             }
 
-            const mode = resolveViewMode(view);
+            const currentViewMode = resolveMarkdownViewMode(activeMarkdownView);
 
-            if (mode !== EVENT_MODE_PREVIEW) {
+            if (currentViewMode !== PREVIEW_VIEW_MODE) {
                 return;
             }
 
-            ev.preventDefault();
-            ev.stopImmediatePropagation();
+            pointerEvent.preventDefault();
+            pointerEvent.stopImmediatePropagation();
 
-            const previewText = getTaskTextPreview(checkboxEl);
-            const approxLine = resolveApproxLineFromPreviewCheckbox(checkboxEl);
+            const taskPreviewText = extractTaskPreviewText(taskCheckboxElement);
+            const approximateLineIndex = resolveApproximateLineFromPreviewCheckbox(taskCheckboxElement);
 
-            const snapshot = await readFileLines(app, view);
+            const fileSnapshot = await readActiveFileSnapshot(obsidianApp, activeMarkdownView);
 
-            if (!snapshot) {
+            if (!fileSnapshot) {
                 return;
             }
 
-            const { file, vault, eol, lines } = snapshot;
+            const { activeFile, appVault, endOfLineSequence, fileLines } = fileSnapshot;
 
-            const best = resolveBestTaskLine(lines, approxLine, previewText);
+            const bestMatchResult = resolveBestMatchingTaskLine(fileLines, approximateLineIndex, taskPreviewText);
 
-            if (!best || best.idx == null) {
+            if (!bestMatchResult || bestMatchResult.matchedLineIndex == null) {
                 return;
             }
 
-            const idx = best.idx;
+            const matchedLineIndex = bestMatchResult.matchedLineIndex;
 
-            if (idx < 0 || idx >= lines.length) {
+            if (matchedLineIndex < 0 || matchedLineIndex >= fileLines.length) {
                 return;
             }
 
-            const current = lines[idx];
+            const currentLineText = fileLines[matchedLineIndex];
 
-            if (typeof current !== 'string') {
+            if (typeof currentLineText !== 'string') {
                 return;
             }
 
-            const updated = toggleMarker(current);
+            const updatedLineText = toggleTaskMarkerInLine(currentLineText);
 
-            if (updated === current) {
+            if (updatedLineText === currentLineText) {
                 return;
             }
 
-            lines[idx] = updated;
+            fileLines[matchedLineIndex] = updatedLineText;
 
             try {
-                await vault.modify(file, lines.join(eol));
-            } catch (_) {
+                await appVault.modify(activeFile, fileLines.join(endOfLineSequence));
+            } catch (ignoredError) {
+                void ignoredError;
                 return;
             }
         };
 
-        /** Handler de edicao: alterna a tarefa diretamente no editor ativo. */
-        this._editHandler = (ev) => {
-            const checkboxEl = findCheckboxFromEvent(ev);
+        /** Handler de edição: alterna a tarefa diretamente no editor ativo. */
+        this._onEditClick = (clickEvent) => {
+            const taskCheckboxElement = resolveTaskCheckboxFromEvent(clickEvent);
 
-            if (!checkboxEl) {
+            if (!taskCheckboxElement) {
                 return;
             }
 
-            const view = resolveMarkdownView(app);
+            const activeMarkdownView = resolveActiveMarkdownView(obsidianApp);
 
-            if (!view) {
+            if (!activeMarkdownView) {
                 return;
             }
 
-            if (resolveViewMode(view) === EVENT_MODE_PREVIEW) {
+            if (resolveMarkdownViewMode(activeMarkdownView) === PREVIEW_VIEW_MODE) {
                 return;
             }
 
-            ev.preventDefault();
-            ev.stopImmediatePropagation();
+            clickEvent.preventDefault();
+            clickEvent.stopImmediatePropagation();
 
-            handleEditInteraction(app, ev);
+            handleEditModeInteraction(obsidianApp, clickEvent);
         };
 
-        document.addEventListener(POINTER_DOWN_EVENT, this._previewHandler, CAPTURE_PHASE);
-        document.addEventListener(CLICK_EVENT, this._editHandler, CAPTURE_PHASE);
+        document.addEventListener(POINTER_DOWN_EVENT_NAME, this._onPreviewPointerDown, EVENT_LISTENER_CAPTURE_PHASE);
+        document.addEventListener(CLICK_EVENT_NAME, this._onEditClick, EVENT_LISTENER_CAPTURE_PHASE);
     }
 
     /** Remove os handlers registrados no carregamento do plugin. */
     onunload() {
-        if (this._previewHandler) {
-            document.removeEventListener(POINTER_DOWN_EVENT, this._previewHandler, CAPTURE_PHASE);
-            this._previewHandler = null;
+        if (this._onPreviewPointerDown) {
+            document.removeEventListener(
+                POINTER_DOWN_EVENT_NAME,
+                this._onPreviewPointerDown,
+                EVENT_LISTENER_CAPTURE_PHASE
+            );
+            this._onPreviewPointerDown = null;
         }
 
-        if (this._editHandler) {
-            document.removeEventListener(CLICK_EVENT, this._editHandler, CAPTURE_PHASE);
-            this._editHandler = null;
+        if (this._onEditClick) {
+            document.removeEventListener(CLICK_EVENT_NAME, this._onEditClick, EVENT_LISTENER_CAPTURE_PHASE);
+            this._onEditClick = null;
         }
     }
 };
