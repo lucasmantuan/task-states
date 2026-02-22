@@ -9,7 +9,7 @@ const LIST_ITEM_TAG_SELECTOR = 'li';
 const TASK_LIST_ITEM_SELECTOR = 'li.task-list-item';
 const POINTER_DOWN_EVENT_NAME = 'pointerdown';
 
-/** Tipos e modos de view do Obsidian utilizados pelo plugin. */
+/** Tipos e modos de view utilizados pelo plugin. */
 const PREVIEW_VIEW_MODE = 'preview';
 const MARKDOWN_VIEW_TYPE_NAME = 'markdown';
 
@@ -79,7 +79,7 @@ const parseDataLineToLineNumber = (rawDataLineValue) => {
     return parsedLineNumber;
 };
 
-/** Verifica se a view recebida é uma view Markdown do Obsidian. */
+/** Verifica se a view recebida é uma view markdown. */
 const isMarkdownViewInstance = (viewCandidate) => {
     if (!viewCandidate) {
         return false;
@@ -484,7 +484,7 @@ module.exports = class TaskStatesPlugin extends Plugin {
             return;
         }
 
-        /** Handler do preview: localiza a linha real da tarefa e grava no arquivo. */
+        /** Handler do preview - localiza a linha real da tarefa e grava no arquivo. */
         this._onPreviewPointerDown = async (pointerEvent) => {
             const taskCheckboxElement = resolveTaskCheckboxFromEvent(pointerEvent);
 
@@ -552,7 +552,7 @@ module.exports = class TaskStatesPlugin extends Plugin {
             }
         };
 
-        /** Handler de edição: alterna a tarefa diretamente no editor ativo. */
+        /** Handler de edição - alterna a tarefa diretamente no editor ativo. */
         this._onEditClick = (clickEvent) => {
             const taskCheckboxElement = resolveTaskCheckboxFromEvent(clickEvent);
 

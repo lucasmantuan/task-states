@@ -1,6 +1,6 @@
 # Task States
 
-Toggle task states in Obsidian by clicking the task checkbox.
+Toggle task states by clicking the task checkbox.
 
 ## Features
 
@@ -28,7 +28,7 @@ Toggle task states in Obsidian by clicking the task checkbox.
 
 ## How It Works
 
-- In Reading view, the plugin intercepts checkbox clicks and updates the note content using Vault APIs.
+- In Reading view, the system intercepts checkbox clicks and updates the note content using internal file APIs.
 - In Source and Live Preview, it resolves the clicked line in the editor and updates that specific task marker.
 - If a task has an unknown marker, the next click normalizes it to `[*]` (STANDBY).
 
@@ -37,4 +37,4 @@ Toggle task states in Obsidian by clicking the task checkbox.
 - Add settings panel for custom colors and state labels.
 - Allow custom task cycle order.
 - Add commands and hotkeys for state changes.
-- Improve compatibility with other plugins and themes.
+- Improve compatibility with other extensions and themes.
