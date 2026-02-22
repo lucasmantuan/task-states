@@ -42,12 +42,6 @@ const isMarkdownView = (view) => {
     return view.viewType === 'markdown' || view.type === 'markdown';
 };
 
-/** Recupera a view Markdown ativa do workspace. */
-const resolveMarkdownView = (app) => {
-    const view = app?.workspace?.activeLeaf?.view ?? null;
-    return isMarkdownView(view) ? view : null;
-};
-
 /** Descobre o modo atual da view Markdown (preview/live/source). */
 const resolveViewMode = (view) => {
     if (!view) return null;
@@ -55,6 +49,12 @@ const resolveViewMode = (view) => {
     if (typeof view.getState === 'function') return view.getState()?.mode ?? null;
     if (typeof view.currentMode?.getMode === 'function') return view.currentMode.getMode();
     return view.currentMode?.mode ?? null;
+};
+
+/** Recupera a view Markdown ativa do workspace. */
+const resolveMarkdownView = (app) => {
+    const view = app?.workspace?.activeLeaf?.view ?? null;
+    return isMarkdownView(view) ? view : null;
 };
 
 /** Identifica se o evento veio de um checkbox de tarefa válido. */
@@ -113,15 +113,18 @@ const readFileLines = async (app, view) => {
     return { file, vault, eol, lines };
 };
 
+/** Cicla o marcador da tarefa na ordem definida pelo plugin. */
 const toggleMarker = (text) => {
     const value = String(text ?? '');
     const match = value.match(TASK_LINE_PATTERN_RE);
     if (!match) return value;
+
     const prefix = match[1];
     const marker = match[2];
     const sequence = ['*', 'x', '-', '!', '>', ' '];
     const index = sequence.indexOf(marker);
     const next = index === -1 ? sequence[0] : sequence[(index + 1) % sequence.length];
+
     return value.replace(TASK_LINE_PATTERN_RE, `${prefix}[${next}]`);
 };
 
@@ -220,10 +223,76 @@ const resolveBestTaskLine = (lines, approxIdx, expectedRenderedText) => {
     return best.idx == null ? null : best;
 };
 
-module.exports = class PreviewTaskMdResolvePlugin extends Plugin {
+/** Recupera uma instância de editor compatível com leitura/escrita de linhas. */
+const getEditor = (app) => {
+    const view = resolveMarkdownView(app);
+    if (!view) return null;
+
+    const candidates = [
+        view.editor ?? null,
+        view.sourceMode?.editor ?? null,
+        view.sourceMode?.cmEditor ?? null,
+        view.currentMode?.editor ?? null
+    ];
+
+    for (const editor of candidates) {
+        if (!editor) continue;
+        if (
+            typeof editor.getLine === 'function' &&
+            (typeof editor.setLine === 'function' || typeof editor.replaceRange === 'function')
+        ) {
+            return editor;
+        }
+    }
+
+    return null;
+};
+
+/** Atualiza o conteúdo de uma linha no editor, independente da API exposta. */
+const setLine = (editor, lineNo, newText) => {
+    if (!editor) return false;
+
+    if (typeof editor.setLine === 'function') {
+        editor.setLine(lineNo, newText);
+        return true;
+    }
+
+    if (typeof editor.replaceRange === 'function' && typeof editor.getLine === 'function') {
+        const old = editor.getLine(lineNo);
+        if (typeof old !== 'string') return false;
+        editor.replaceRange(newText, { line: lineNo, ch: 0 }, { line: lineNo, ch: old.length });
+        return true;
+    }
+
+    return false;
+};
+
+/** Aplica o ciclo de status no editor ativo usando a posição do clique para o modo de edição. */
+const toggleTaskAtLineViaEditor = (app, ev) => {
+    const editor = getEditor(app);
+    if (!editor || typeof editor.posAtCoords !== 'function') return false;
+
+    const pos = editor.posAtCoords(ev.clientX, ev.clientY);
+    if (!pos || typeof pos.line !== 'number') return false;
+
+    const lineNo = pos.line;
+    const current = editor.getLine(lineNo);
+    if (typeof current !== 'string') return false;
+
+    const updated = toggleMarker(current);
+    if (updated === current) return false;
+
+    return setLine(editor, lineNo, updated);
+};
+
+/** Processa o clique em edição e atualiza a linha no editor. */
+const handleEditInteraction = (app, ev) => {
+    return toggleTaskAtLineViaEditor(app, ev);
+};
+
+module.exports = class TaskStatesPlugin extends Plugin {
     async onload() {
         const app = this.app ?? globalThis.app;
-
         if (!app) return;
 
         this._previewHandler = async (ev) => {
@@ -268,13 +337,33 @@ module.exports = class PreviewTaskMdResolvePlugin extends Plugin {
             }
         };
 
+        this._editHandler = (ev) => {
+            const checkboxEl = findCheckboxFromEvent(ev);
+            if (!checkboxEl) return;
+
+            const view = resolveMarkdownView(app);
+            if (!view) return;
+            if (resolveViewMode(view) === 'preview') return;
+
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+
+            handleEditInteraction(app, ev);
+        };
+
         document.addEventListener('pointerdown', this._previewHandler, true);
+        document.addEventListener('click', this._editHandler, true);
     }
 
     onunload() {
         if (this._previewHandler) {
             document.removeEventListener('pointerdown', this._previewHandler, true);
             this._previewHandler = null;
+        }
+
+        if (this._editHandler) {
+            document.removeEventListener('click', this._editHandler, true);
+            this._editHandler = null;
         }
     }
 };
