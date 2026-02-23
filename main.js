@@ -1,6 +1,6 @@
 const { Plugin } = require('obsidian');
 
-/** Seletores e eventos de interação no DOM. */
+/** Seletores e eventos de interação do DOM. */
 const EVENT_LISTENER_CAPTURE_PHASE = true;
 const TASK_CHECKBOX_SELECTOR = 'input.task-list-item-checkbox';
 const CLICK_EVENT_NAME = 'click';
@@ -9,19 +9,15 @@ const LIST_ITEM_TAG_SELECTOR = 'li';
 const TASK_LIST_ITEM_SELECTOR = 'li.task-list-item';
 const POINTER_DOWN_EVENT_NAME = 'pointerdown';
 
-/** Tipos e modos de view utilizados pelo plugin. */
+/** Tipos e modos de visualização usados pelo plugin. */
 const PREVIEW_VIEW_MODE = 'preview';
 const MARKDOWN_VIEW_TYPE_NAME = 'markdown';
 
-/** Literais de texto e separadores reutilizados. */
-const ELLIPSIS_SUFFIX = '...';
-const EMPTY_TEXT = '';
+/** Sequências de fim de linha (EOL) suportadas para leitura e escrita. */
 const UNIX_EOL_SEQUENCE = '\n';
 const WINDOWS_EOL_SEQUENCE = '\r\n';
-const SPACE_CHARACTER = ' ';
-const TOKEN_SEPARATOR_CHARACTER = ' ';
 
-/** Regex de parsing e normalizacao de markdown. */
+/** Expressões regulares para parsing e normalização de Markdown. */
 const BOLD_ASTERISK_MARKDOWN_RE = /\*\*([^*]+)\*\*/g;
 const BOLD_UNDERSCORE_MARKDOWN_RE = /__([^_]+)__/g;
 const MARKDOWN_RESIDUAL_SYMBOL_RE = /[>*#]/g;
@@ -40,7 +36,7 @@ const WHITESPACE_SEQUENCE_RE = /\s+/g;
 const WIKI_LINK_RE = /\[\[([^\]]+)\]\]/g;
 const WIKI_LINK_WITH_ALIAS_RE = /\[\[([^\]|]+)\|([^\]]+)\]\]/g;
 
-/** Parametros de heuristica para localizacao e comparacao de tarefas. */
+/** Parâmetros de heurística para localização e comparação de tarefas. */
 const CONTAINS_MATCH_BASE_SCORE = 7000;
 const EXACT_MATCH_SCORE = 10000;
 const FALLBACK_FULL_SCAN_MIN_SCORE = 1500;
@@ -54,17 +50,17 @@ const TASK_SEARCH_WINDOWS = [
     { linesBefore: 600, linesAfter: 1200 }
 ];
 
-/** Normaliza texto para comparacoes, removendo espacos duplicados e NBSP. */
+/** Normaliza o texto para comparações, removendo espaços duplicados e NBSP. */
 const normalizeTextForComparison = (inputValue) => {
-    const normalizedComparisonText = String(inputValue ?? EMPTY_TEXT)
-        .replace(NON_BREAKING_SPACE_RE, SPACE_CHARACTER)
-        .replace(WHITESPACE_SEQUENCE_RE, SPACE_CHARACTER)
+    const normalizedComparisonText = String(inputValue ?? '')
+        .replace(NON_BREAKING_SPACE_RE, ' ')
+        .replace(WHITESPACE_SEQUENCE_RE, ' ')
         .trim();
 
     return normalizedComparisonText;
 };
 
-/** Converte o valor de `data-line` para indice numerico valido (>= 0). */
+/** Converte o valor de `data-line` em um índice numérico válido (>= 0). */
 const parseDataLineToLineNumber = (rawDataLineValue) => {
     if (rawDataLineValue == null) {
         return null;
@@ -79,7 +75,7 @@ const parseDataLineToLineNumber = (rawDataLineValue) => {
     return parsedLineNumber;
 };
 
-/** Verifica se a view recebida é uma view markdown. */
+/** Verifica se a visualização recebida é do tipo Markdown. */
 const isMarkdownViewInstance = (viewCandidate) => {
     if (!viewCandidate) {
         return false;
@@ -92,7 +88,7 @@ const isMarkdownViewInstance = (viewCandidate) => {
     return viewCandidate.viewType === MARKDOWN_VIEW_TYPE_NAME || viewCandidate.type === MARKDOWN_VIEW_TYPE_NAME;
 };
 
-/** Descobre o modo atual da view Markdown (preview/live/source). */
+/** Identifica o modo atual da visualização Markdown (preview/live/source). */
 const resolveMarkdownViewMode = (markdownView) => {
     if (!markdownView) {
         return null;
@@ -113,7 +109,7 @@ const resolveMarkdownViewMode = (markdownView) => {
     return markdownView.currentMode?.mode ?? null;
 };
 
-/** Recupera a view Markdown ativa do workspace. */
+/** Recupera a visualização Markdown ativa no workspace. */
 const resolveActiveMarkdownView = (obsidianApp) => {
     const activeViewCandidate = obsidianApp?.workspace?.activeLeaf?.view ?? null;
 
@@ -135,7 +131,7 @@ const resolveTaskCheckboxFromEvent = (domEvent) => {
     return null;
 };
 
-/** Extrai uma versao curta do texto renderizado da tarefa no preview. */
+/** Extrai uma versão curta do texto renderizado da tarefa no preview. */
 const extractTaskPreviewText = (taskCheckboxElement) => {
     const taskListItemElement =
         taskCheckboxElement?.closest?.(TASK_LIST_ITEM_SELECTOR) ??
@@ -148,13 +144,13 @@ const extractTaskPreviewText = (taskCheckboxElement) => {
     }
 
     if (renderedTaskText.length > PREVIEW_TEXT_MAX_LENGTH) {
-        return `${renderedTaskText.slice(0, PREVIEW_TEXT_MAX_LENGTH - ELLIPSIS_SUFFIX.length)}${ELLIPSIS_SUFFIX}`;
+        return `${renderedTaskText.slice(0, PREVIEW_TEXT_MAX_LENGTH - '...'.length)}...`;
     }
 
     return renderedTaskText;
 };
 
-/** Resolve a linha aproximada da tarefa com base em atributos `data-line`. */
+/** Determina a linha aproximada da tarefa com base em atributos `data-line`. */
 const resolveApproximateLineFromPreviewCheckbox = (taskCheckboxElement) => {
     const taskListItemElement =
         taskCheckboxElement?.closest?.(TASK_LIST_ITEM_SELECTOR) ??
@@ -178,11 +174,11 @@ const resolveApproximateLineFromPreviewCheckbox = (taskCheckboxElement) => {
     return null;
 };
 
-/** Remove sintaxe markdown comum para comparar apenas o texto "plano" da tarefa. */
+/** Remove sintaxe Markdown comum para comparar apenas o texto "plano" da tarefa. */
 const stripMarkdownFormattingFromPreviewText = (markdownPreviewText) => {
-    let plainPreviewText = String(markdownPreviewText ?? EMPTY_TEXT);
+    let plainPreviewText = String(markdownPreviewText ?? '');
 
-    plainPreviewText = plainPreviewText.replace(TASK_MARKER_PREFIX_RE, EMPTY_TEXT);
+    plainPreviewText = plainPreviewText.replace(TASK_MARKER_PREFIX_RE, '');
     plainPreviewText = plainPreviewText.replace(WIKI_LINK_WITH_ALIAS_RE, '$2');
     plainPreviewText = plainPreviewText.replace(WIKI_LINK_RE, '$1');
     plainPreviewText = plainPreviewText.replace(MARKDOWN_LINK_RE, '$1');
@@ -191,12 +187,12 @@ const stripMarkdownFormattingFromPreviewText = (markdownPreviewText) => {
     plainPreviewText = plainPreviewText.replace(BOLD_UNDERSCORE_MARKDOWN_RE, '$1');
     plainPreviewText = plainPreviewText.replace(ITALIC_ASTERISK_MARKDOWN_RE, '$1');
     plainPreviewText = plainPreviewText.replace(ITALIC_UNDERSCORE_MARKDOWN_RE, '$1');
-    plainPreviewText = plainPreviewText.replace(MARKDOWN_RESIDUAL_SYMBOL_RE, SPACE_CHARACTER);
+    plainPreviewText = plainPreviewText.replace(MARKDOWN_RESIDUAL_SYMBOL_RE, ' ');
 
     return normalizeTextForComparison(plainPreviewText);
 };
 
-/** Lê o arquivo ativo e devolve linhas mais EOL detectado para escrita segura. */
+/** Lê o arquivo ativo e retorna as linhas com o EOL detectado para escrita segura. */
 const readActiveFileSnapshot = async (obsidianApp, markdownView) => {
     const activeFile = markdownView?.file ?? null;
     const appVault = obsidianApp?.vault;
@@ -213,9 +209,9 @@ const readActiveFileSnapshot = async (obsidianApp, markdownView) => {
     return { activeFile, appVault, endOfLineSequence, fileLines };
 };
 
-/** Cicla o marcador da tarefa na ordem definida pelo plugin. */
+/** Alterna o marcador da tarefa seguindo a ordem definida pelo plugin. */
 const toggleTaskMarkerInLine = (taskLineText) => {
-    const taskLineValue = String(taskLineText ?? EMPTY_TEXT);
+    const taskLineValue = String(taskLineText ?? '');
     const taskMarkerMatch = taskLineValue.match(TASK_MARKER_LINE_RE);
 
     if (!taskMarkerMatch) {
@@ -233,7 +229,7 @@ const toggleTaskMarkerInLine = (taskLineText) => {
     return taskLineValue.replace(TASK_MARKER_LINE_RE, `${taskListPrefix}[${nextTaskMarker}]`);
 };
 
-/** Junta o bloco da tarefa (linha base + continuacoes) para comparação textual. */
+/** Junta o bloco da tarefa (linha base + continuações) para comparação textual. */
 const buildTaskBlockTextForComparison = (fileLines, taskStartLineIndex) => {
     const baseTaskLine = fileLines[taskStartLineIndex];
 
@@ -241,7 +237,7 @@ const buildTaskBlockTextForComparison = (fileLines, taskStartLineIndex) => {
         return baseTaskLine;
     }
 
-    const baseLineIndent = (baseTaskLine.match(LEADING_WHITESPACE_RE) ?? [EMPTY_TEXT])[0].length;
+    const baseLineIndent = (baseTaskLine.match(LEADING_WHITESPACE_RE) ?? [''])[0].length;
     const taskBlockLines = [baseTaskLine];
 
     for (let j = taskStartLineIndex + 1; j < fileLines.length; j += 1) {
@@ -251,7 +247,7 @@ const buildTaskBlockTextForComparison = (fileLines, taskStartLineIndex) => {
             break;
         }
 
-        const continuationLineIndent = (continuationLine.match(LEADING_WHITESPACE_RE) ?? [EMPTY_TEXT])[0].length;
+        const continuationLineIndent = (continuationLine.match(LEADING_WHITESPACE_RE) ?? [''])[0].length;
 
         if (continuationLineIndent <= baseLineIndent && MARKDOWN_LIST_ITEM_PREFIX_RE.test(continuationLine)) {
             break;
@@ -264,10 +260,10 @@ const buildTaskBlockTextForComparison = (fileLines, taskStartLineIndex) => {
         taskBlockLines.push(continuationLine);
     }
 
-    return taskBlockLines.join(SPACE_CHARACTER);
+    return taskBlockLines.join(' ');
 };
 
-/** Calcula score de similaridade entre texto candidato e texto esperado. */
+/** Calcula a pontuação de similaridade entre o texto candidato e o texto esperado. */
 const calculateMatchScore = (candidatePlainText, expectedPlainText) => {
     if (!candidatePlainText || !expectedPlainText) {
         return 0;
@@ -281,8 +277,8 @@ const calculateMatchScore = (candidatePlainText, expectedPlainText) => {
         return CONTAINS_MATCH_BASE_SCORE + Math.min(candidatePlainText.length, expectedPlainText.length);
     }
 
-    const candidateTokens = candidatePlainText.split(TOKEN_SEPARATOR_CHARACTER).filter(Boolean);
-    const expectedTokens = expectedPlainText.split(TOKEN_SEPARATOR_CHARACTER).filter(Boolean);
+    const candidateTokens = candidatePlainText.split(' ').filter(Boolean);
+    const expectedTokens = expectedPlainText.split(' ').filter(Boolean);
 
     if (!candidateTokens.length || !expectedTokens.length) {
         return 0;
@@ -305,7 +301,7 @@ const calculateMatchScore = (candidatePlainText, expectedPlainText) => {
     return Math.round(jaccardSimilarity * JACCARD_SCORE_MULTIPLIER);
 };
 
-/** Resolve a melhor linha de tarefa candidata usando busca local e fallback global. */
+/** Encontra a melhor linha candidata de tarefa usando busca local e fallback global. */
 const resolveBestMatchingTaskLine = (fileLines, approximateLineIndex, expectedRenderedTaskText) => {
     const normalizedExpectedText = normalizeTextForComparison(expectedRenderedTaskText);
     const nearbyLineCandidates = [approximateLineIndex, approximateLineIndex - 1, approximateLineIndex + 1];
@@ -335,7 +331,7 @@ const resolveBestMatchingTaskLine = (fileLines, approximateLineIndex, expectedRe
 
     let bestMatchResult = { matchedLineIndex: null, matchScore: 0 };
 
-    /** Avalia uma linha candidata e atualiza o melhor score encontrado. */
+    /** Avalia uma linha candidata e atualiza a melhor pontuação encontrada. */
     const evaluateCandidateLine = (candidateLineIndex) => {
         const candidateLineText = fileLines[candidateLineIndex];
 
@@ -380,7 +376,7 @@ const resolveBestMatchingTaskLine = (fileLines, approximateLineIndex, expectedRe
     return bestMatchResult;
 };
 
-/** Recupera uma instância de editor compatível com leitura/escrita de linhas. */
+/** Recupera uma instância de editor compatível com leitura e escrita de linhas. */
 const resolveCompatibleEditor = (obsidianApp) => {
     const activeMarkdownView = resolveActiveMarkdownView(obsidianApp);
 
@@ -411,7 +407,7 @@ const resolveCompatibleEditor = (obsidianApp) => {
     return null;
 };
 
-/** Atualiza o conteúdo de uma linha no editor, independente da API exposta. */
+/** Atualiza o conteúdo de uma linha no editor, independentemente da API exposta. */
 const setEditorLineText = (editorInstance, lineNumber, updatedLineText) => {
     if (!editorInstance) {
         return false;
@@ -440,7 +436,7 @@ const setEditorLineText = (editorInstance, lineNumber, updatedLineText) => {
     return false;
 };
 
-/** Aplica o ciclo de status no editor ativo usando a posição do clique para o modo de edição. */
+/** Aplica o ciclo de status no editor ativo usando a posição do clique no modo de edição. */
 const toggleTaskAtCursorLineInEditor = (obsidianApp, pointerEvent) => {
     const editorInstance = resolveCompatibleEditor(obsidianApp);
 
@@ -470,13 +466,13 @@ const toggleTaskAtCursorLineInEditor = (obsidianApp, pointerEvent) => {
     return setEditorLineText(editorInstance, lineNumber, updatedLineText);
 };
 
-/** Processa o clique em edição e atualiza a linha no editor. */
+/** Processa o clique no modo de edição e atualiza a linha no editor. */
 const handleEditModeInteraction = (obsidianApp, clickEvent) => {
     return toggleTaskAtCursorLineInEditor(obsidianApp, clickEvent);
 };
 
 module.exports = class TaskStatesPlugin extends Plugin {
-    /** Registra handlers de preview e edicao para alternar estado de tarefas. */
+    /** Registra handlers de preview e edição para alternar o estado das tarefas. */
     async onload() {
         const obsidianApp = this.app ?? globalThis.app;
 
@@ -484,7 +480,7 @@ module.exports = class TaskStatesPlugin extends Plugin {
             return;
         }
 
-        /** Handler do preview - localiza a linha real da tarefa e grava no arquivo. */
+        /** Handler de preview: localiza a linha real da tarefa e grava no arquivo. */
         this._onPreviewPointerDown = async (pointerEvent) => {
             const taskCheckboxElement = resolveTaskCheckboxFromEvent(pointerEvent);
 
@@ -552,7 +548,7 @@ module.exports = class TaskStatesPlugin extends Plugin {
             }
         };
 
-        /** Handler de edição - alterna a tarefa diretamente no editor ativo. */
+        /** Handler de edição: alterna a tarefa diretamente no editor ativo. */
         this._onEditClick = (clickEvent) => {
             const taskCheckboxElement = resolveTaskCheckboxFromEvent(clickEvent);
 
@@ -580,7 +576,7 @@ module.exports = class TaskStatesPlugin extends Plugin {
         document.addEventListener(CLICK_EVENT_NAME, this._onEditClick, EVENT_LISTENER_CAPTURE_PHASE);
     }
 
-    /** Remove os handlers registrados no carregamento do plugin. */
+    /** Remove os handlers registrados durante o carregamento do plugin. */
     onunload() {
         if (this._onPreviewPointerDown) {
             document.removeEventListener(
@@ -592,7 +588,11 @@ module.exports = class TaskStatesPlugin extends Plugin {
         }
 
         if (this._onEditClick) {
-            document.removeEventListener(CLICK_EVENT_NAME, this._onEditClick, EVENT_LISTENER_CAPTURE_PHASE);
+            document.removeEventListener(
+                CLICK_EVENT_NAME, 
+                this._onEditClick, 
+                EVENT_LISTENER_CAPTURE_PHASE
+            );
             this._onEditClick = null;
         }
     }
