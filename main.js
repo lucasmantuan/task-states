@@ -1,4 +1,4 @@
-const { Plugin } = require('obsidian');
+const { Plugin, Modal, Notice, moment, setIcon } = require('obsidian');
 
 /** Seletores e eventos de interação do DOM. */
 const EVENT_LISTENER_CAPTURE_PHASE = true;
@@ -32,6 +32,7 @@ const MARKDOWN_LINK_RE = /\[([^\]]+)\]\([^)]+\)/g;
 const NON_BREAKING_SPACE_RE = /\u00A0/g;
 const TASK_MARKER_LINE_RE = /^(\s*(?:>\s*)*[-*+]\s*)\[([^\]]*)\]/;
 const TASK_MARKER_PREFIX_RE = /^\s*(?:>\s*)*[-*+]\s*\[[^\]]*\]\s*/;
+const TRAILING_WHITESPACE_RE = /\s+$/;
 const WHITESPACE_SEQUENCE_RE = /\s+/g;
 const WIKI_LINK_RE = /\[\[([^\]]+)\]\]/g;
 const WIKI_LINK_WITH_ALIAS_RE = /\[\[([^\]|]+)\|([^\]]+)\]\]/g;
@@ -49,6 +50,30 @@ const TASK_SEARCH_WINDOWS = [
     { linesBefore: 200, linesAfter: 600 },
     { linesBefore: 600, linesAfter: 1200 }
 ];
+
+/** Parâmetros do recurso de data Dataview em tarefas Markdown. */
+const ADD_DATE_TO_CURRENT_TASK_COMMAND_ID = 'add-or-update-task-date';
+const ENTER_KEY_NAME = 'Enter';
+const KEY_DOWN_EVENT_NAME = 'keydown';
+const MOD_CTA_BUTTON_CLASS_NAME = 'mod-cta';
+const TASK_DATE_APPLY_BUTTON_LABEL = 'Aplicar';
+const TASK_DATE_BUTTON_CLASS_NAME = 'task-states-date-button';
+const TASK_DATE_BUTTON_LABEL = 'Definir data da tarefa';
+const TASK_DATE_CANCEL_BUTTON_LABEL = 'Cancelar';
+const TASK_DATE_COMMAND_NAME = 'Adicionar ou atualizar data da tarefa';
+const TASK_DATE_FIELD_NAME = 'data';
+const TASK_DATE_ICON_NAME = 'calendar';
+const TASK_DATE_INLINE_FIELD_RE = /\[data::\s*\d{4}-\d{2}-\d{2}\s*\]/;
+const TASK_DATE_INPUT_CLASS_NAME = 'task-states-date-input';
+const TASK_DATE_INPUT_TYPE_NAME = 'date';
+const TASK_DATE_INVALID_DATE_NOTICE = 'Selecione uma data antes de aplicar.';
+const TASK_DATE_ISO_FORMAT = 'YYYY-MM-DD';
+const TASK_DATE_MODAL_BUTTONS_CLASS_NAME = 'task-states-date-modal-buttons';
+const TASK_DATE_MODAL_TITLE = 'Selecionar data da tarefa';
+const TASK_DATE_NOT_A_TASK_NOTICE = 'A linha atual não é uma tarefa Markdown.';
+const TASK_DATE_TODAY_BUTTON_LABEL = 'Hoje';
+const TASK_DATE_VALUE_RE = /\d{4}-\d{2}-\d{2}/;
+const TASK_LIST_ITEM_NESTED_LIST_SELECTOR = ':scope > ul, :scope > ol';
 
 /** Normaliza o texto para comparações, removendo espaços duplicados e NBSP. */
 const normalizeTextForComparison = (inputValue) => {
@@ -471,6 +496,196 @@ const handleEditModeInteraction = (obsidianApp, clickEvent) => {
     return toggleTaskAtCursorLineInEditor(obsidianApp, clickEvent);
 };
 
+/** Aplica uma transformação na linha real da tarefa renderizada no modo leitura. */
+const applyTransformationToPreviewTaskLine = async (obsidianApp, taskCheckboxElement, transformLineFunction) => {
+    const activeMarkdownView = resolveActiveMarkdownView(obsidianApp);
+
+    if (!activeMarkdownView) {
+        return false;
+    }
+
+    const taskPreviewText = extractTaskPreviewText(taskCheckboxElement);
+    const approximateLineIndex = resolveApproximateLineFromPreviewCheckbox(taskCheckboxElement);
+
+    const fileSnapshot = await readActiveFileSnapshot(obsidianApp, activeMarkdownView);
+
+    if (!fileSnapshot) {
+        return false;
+    }
+
+    const { activeFile, appVault, endOfLineSequence, fileLines } = fileSnapshot;
+
+    const bestMatchResult = resolveBestMatchingTaskLine(fileLines, approximateLineIndex, taskPreviewText);
+
+    if (!bestMatchResult || bestMatchResult.matchedLineIndex == null) {
+        return false;
+    }
+
+    const matchedLineIndex = bestMatchResult.matchedLineIndex;
+
+    if (matchedLineIndex < 0 || matchedLineIndex >= fileLines.length) {
+        return false;
+    }
+
+    const currentLineText = fileLines[matchedLineIndex];
+
+    if (typeof currentLineText !== 'string') {
+        return false;
+    }
+
+    const updatedLineText = transformLineFunction(currentLineText);
+
+    if (updatedLineText === currentLineText) {
+        return false;
+    }
+
+    fileLines[matchedLineIndex] = updatedLineText;
+
+    try {
+        await appVault.modify(activeFile, fileLines.join(endOfLineSequence));
+        return true;
+    } catch (ignoredError) {
+        void ignoredError;
+        return false;
+    }
+};
+
+/** Retorna a data atual no formato ISO `YYYY-MM-DD`. */
+const getTodayISODate = () => moment().format(TASK_DATE_ISO_FORMAT);
+
+/** Constrói o campo Dataview de data com a data informada. */
+const buildDataviewDateField = (dateValue) => `[${TASK_DATE_FIELD_NAME}:: ${dateValue}]`;
+
+/** Adiciona ou substitui o campo `[data:: YYYY-MM-DD]` em uma linha de tarefa Markdown. */
+const addOrReplaceDataviewDateFieldInTaskLine = (taskLineText, dateValue) => {
+    const taskLineValue = String(taskLineText ?? '');
+    const dataviewDateField = buildDataviewDateField(dateValue);
+
+    if (TASK_DATE_INLINE_FIELD_RE.test(taskLineValue)) {
+        return taskLineValue.replace(TASK_DATE_INLINE_FIELD_RE, dataviewDateField);
+    }
+
+    return `${taskLineValue.replace(TRAILING_WHITESPACE_RE, '')} ${dataviewDateField}`;
+};
+
+/** Extrai a data existente do campo Dataview em uma linha de tarefa, se houver. */
+const extractExistingDataviewDateFromTaskLine = (taskLineText) => {
+    const taskDateFieldMatch = String(taskLineText ?? '').match(TASK_DATE_INLINE_FIELD_RE);
+
+    if (!taskDateFieldMatch) {
+        return null;
+    }
+
+    const taskDateValueMatch = taskDateFieldMatch[0].match(TASK_DATE_VALUE_RE);
+    return taskDateValueMatch ? taskDateValueMatch[0] : null;
+};
+
+/** Atualiza a linha da tarefa renderizada no modo leitura com a data selecionada. */
+const addDateFieldFromPreviewTask = (obsidianApp, taskCheckboxElement, selectedDateValue) =>
+    applyTransformationToPreviewTaskLine(
+        obsidianApp,
+        taskCheckboxElement,
+        (taskLineText) => addOrReplaceDataviewDateFieldInTaskLine(taskLineText, selectedDateValue)
+    );
+
+/** Atualiza a linha do cursor no editor ativo com a data selecionada. */
+const addDateFieldAtCurrentEditorLine = (editorInstance, selectedDateValue) => {
+    if (!editorInstance || typeof editorInstance.getCursor !== 'function') {
+        return false;
+    }
+
+    const cursorPosition = editorInstance.getCursor();
+
+    if (!cursorPosition || typeof cursorPosition.line !== 'number') {
+        return false;
+    }
+
+    const cursorLineNumber = cursorPosition.line;
+    const currentLineText = editorInstance.getLine(cursorLineNumber);
+
+    if (typeof currentLineText !== 'string') {
+        return false;
+    }
+
+    if (!TASK_MARKER_PREFIX_RE.test(currentLineText)) {
+        return false;
+    }
+
+    const updatedLineText = addOrReplaceDataviewDateFieldInTaskLine(currentLineText, selectedDateValue);
+
+    if (updatedLineText === currentLineText) {
+        return false;
+    }
+
+    return setEditorLineText(editorInstance, cursorLineNumber, updatedLineText);
+};
+
+/** Modal de seleção de data utilizado para registrar a data Dataview da tarefa. */
+class TaskDatePickerModal extends Modal {
+    constructor(obsidianApp, initialDateValue, onSubmit) {
+        super(obsidianApp);
+        this.initialDateValue = initialDateValue;
+        this.onSubmit = onSubmit;
+    }
+
+    /** Constrói o conteúdo do modal e conecta os botões de ação. */
+    onOpen() {
+        const modalContentElement = this.contentEl;
+        modalContentElement.empty();
+        modalContentElement.createEl('h3', { text: TASK_DATE_MODAL_TITLE });
+
+        const dateInputElement = modalContentElement.createEl('input', { type: TASK_DATE_INPUT_TYPE_NAME });
+        dateInputElement.classList.add(TASK_DATE_INPUT_CLASS_NAME);
+        dateInputElement.value = this.initialDateValue || getTodayISODate();
+
+        const modalButtonsContainer = modalContentElement.createDiv({ cls: TASK_DATE_MODAL_BUTTONS_CLASS_NAME });
+
+        const todayButton = modalButtonsContainer.createEl('button', { text: TASK_DATE_TODAY_BUTTON_LABEL });
+        todayButton.addEventListener(CLICK_EVENT_NAME, () => {
+            dateInputElement.value = getTodayISODate();
+            dateInputElement.focus();
+        });
+
+        const cancelButton = modalButtonsContainer.createEl('button', { text: TASK_DATE_CANCEL_BUTTON_LABEL });
+        cancelButton.addEventListener(CLICK_EVENT_NAME, () => {
+            this.close();
+        });
+
+        const applyButton = modalButtonsContainer.createEl('button', {
+            text: TASK_DATE_APPLY_BUTTON_LABEL,
+            cls: MOD_CTA_BUTTON_CLASS_NAME
+        });
+        applyButton.addEventListener(CLICK_EVENT_NAME, () => {
+            const selectedDateValue = dateInputElement.value;
+
+            if (!selectedDateValue) {
+                new Notice(TASK_DATE_INVALID_DATE_NOTICE);
+                return;
+            }
+
+            this.close();
+
+            if (typeof this.onSubmit === 'function') {
+                this.onSubmit(selectedDateValue);
+            }
+        });
+
+        dateInputElement.addEventListener(KEY_DOWN_EVENT_NAME, (keyboardEvent) => {
+            if (keyboardEvent.key === ENTER_KEY_NAME) {
+                keyboardEvent.preventDefault();
+                applyButton.click();
+            }
+        });
+
+        window.setTimeout(() => dateInputElement.focus(), 0);
+    }
+
+    /** Limpa o conteúdo do modal ao fechar. */
+    onClose() {
+        this.contentEl.empty();
+    }
+}
+
 module.exports = class TaskStatesPlugin extends Plugin {
     /** Registra handlers de preview e edição para alternar o estado das tarefas. */
     async onload() {
@@ -494,58 +709,14 @@ module.exports = class TaskStatesPlugin extends Plugin {
                 return;
             }
 
-            const currentViewMode = resolveMarkdownViewMode(activeMarkdownView);
-
-            if (currentViewMode !== PREVIEW_VIEW_MODE) {
+            if (resolveMarkdownViewMode(activeMarkdownView) !== PREVIEW_VIEW_MODE) {
                 return;
             }
 
             pointerEvent.preventDefault();
             pointerEvent.stopImmediatePropagation();
 
-            const taskPreviewText = extractTaskPreviewText(taskCheckboxElement);
-            const approximateLineIndex = resolveApproximateLineFromPreviewCheckbox(taskCheckboxElement);
-
-            const fileSnapshot = await readActiveFileSnapshot(obsidianApp, activeMarkdownView);
-
-            if (!fileSnapshot) {
-                return;
-            }
-
-            const { activeFile, appVault, endOfLineSequence, fileLines } = fileSnapshot;
-
-            const bestMatchResult = resolveBestMatchingTaskLine(fileLines, approximateLineIndex, taskPreviewText);
-
-            if (!bestMatchResult || bestMatchResult.matchedLineIndex == null) {
-                return;
-            }
-
-            const matchedLineIndex = bestMatchResult.matchedLineIndex;
-
-            if (matchedLineIndex < 0 || matchedLineIndex >= fileLines.length) {
-                return;
-            }
-
-            const currentLineText = fileLines[matchedLineIndex];
-
-            if (typeof currentLineText !== 'string') {
-                return;
-            }
-
-            const updatedLineText = toggleTaskMarkerInLine(currentLineText);
-
-            if (updatedLineText === currentLineText) {
-                return;
-            }
-
-            fileLines[matchedLineIndex] = updatedLineText;
-
-            try {
-                await appVault.modify(activeFile, fileLines.join(endOfLineSequence));
-            } catch (ignoredError) {
-                void ignoredError;
-                return;
-            }
+            await applyTransformationToPreviewTaskLine(obsidianApp, taskCheckboxElement, toggleTaskMarkerInLine);
         };
 
         /** Handler de edição: alterna a tarefa diretamente no editor ativo. */
@@ -574,6 +745,73 @@ module.exports = class TaskStatesPlugin extends Plugin {
 
         document.addEventListener(POINTER_DOWN_EVENT_NAME, this._onPreviewPointerDown, EVENT_LISTENER_CAPTURE_PHASE);
         document.addEventListener(CLICK_EVENT_NAME, this._onEditClick, EVENT_LISTENER_CAPTURE_PHASE);
+
+        this.registerMarkdownPostProcessor((renderedRootElement) => {
+            const taskListItemElements = renderedRootElement.querySelectorAll(TASK_LIST_ITEM_SELECTOR);
+
+            for (const taskListItemElement of taskListItemElements) {
+                const taskCheckboxElement = taskListItemElement.querySelector(TASK_CHECKBOX_SELECTOR);
+
+                if (!taskCheckboxElement) {
+                    continue;
+                }
+
+                if (taskListItemElement.querySelector(`:scope > .${TASK_DATE_BUTTON_CLASS_NAME}`)) {
+                    continue;
+                }
+
+                const dateButtonElement = document.createElement('button');
+                dateButtonElement.type = 'button';
+                dateButtonElement.classList.add(TASK_DATE_BUTTON_CLASS_NAME);
+                dateButtonElement.setAttribute('aria-label', TASK_DATE_BUTTON_LABEL);
+                dateButtonElement.title = TASK_DATE_BUTTON_LABEL;
+                setIcon(dateButtonElement, TASK_DATE_ICON_NAME);
+
+                dateButtonElement.addEventListener(CLICK_EVENT_NAME, (clickEvent) => {
+                    clickEvent.preventDefault();
+                    clickEvent.stopImmediatePropagation();
+
+                    new TaskDatePickerModal(obsidianApp, getTodayISODate(), async (selectedDateValue) => {
+                        await addDateFieldFromPreviewTask(obsidianApp, taskCheckboxElement, selectedDateValue);
+                    }).open();
+                });
+
+                const nestedListElement = taskListItemElement.querySelector(TASK_LIST_ITEM_NESTED_LIST_SELECTOR);
+
+                if (nestedListElement) {
+                    taskListItemElement.insertBefore(dateButtonElement, nestedListElement);
+                } else {
+                    taskListItemElement.appendChild(dateButtonElement);
+                }
+            }
+        });
+
+        this.addCommand({
+            id: ADD_DATE_TO_CURRENT_TASK_COMMAND_ID,
+            name: TASK_DATE_COMMAND_NAME,
+            editorCallback: (editorInstance) => {
+                const cursorPosition = editorInstance.getCursor?.();
+
+                if (!cursorPosition || typeof cursorPosition.line !== 'number') {
+                    new Notice(TASK_DATE_NOT_A_TASK_NOTICE);
+                    return;
+                }
+
+                const currentLineText = editorInstance.getLine(cursorPosition.line);
+
+                if (typeof currentLineText !== 'string' || !TASK_MARKER_PREFIX_RE.test(currentLineText)) {
+                    new Notice(TASK_DATE_NOT_A_TASK_NOTICE);
+                    return;
+                }
+
+                const initialDateValue =
+                    extractExistingDataviewDateFromTaskLine(currentLineText) ?? getTodayISODate();
+
+                new TaskDatePickerModal(obsidianApp, initialDateValue, (selectedDateValue) => {
+                    addDateFieldAtCurrentEditorLine(editorInstance, selectedDateValue);
+                }).open();
+            }
+        });
     }
 
     /** Remove os handlers registrados durante o carregamento do plugin. */
