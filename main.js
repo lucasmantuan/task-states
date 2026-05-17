@@ -60,20 +60,26 @@ const TASK_DATE_APPLY_BUTTON_LABEL = 'Aplicar';
 const TASK_DATE_BUTTON_CLASS_NAME = 'task-states-date-button';
 const TASK_DATE_BUTTON_LABEL = 'Definir data da tarefa';
 const TASK_DATE_CANCEL_BUTTON_LABEL = 'Cancelar';
+const TASK_DATE_CLEAR_BUTTON_CLASS_NAME = 'task-states-date-clear-button';
+const TASK_DATE_CLEAR_BUTTON_LABEL = 'Limpar';
 const TASK_DATE_COMMAND_NAME = 'Adicionar ou atualizar data da tarefa';
 const TASK_DATE_FIELD_NAME = 'data';
 const TASK_DATE_ICON_NAME = 'calendar';
 const TASK_DATE_INLINE_FIELD_RE = /\[data::\s*\d{4}-\d{2}-\d{2}\s*\]/;
+const TASK_DATE_INLINE_FIELD_WITH_LEADING_SPACE_RE = /\s?\[data::\s*\d{4}-\d{2}-\d{2}\s*\]/g;
 const TASK_DATE_INPUT_CLASS_NAME = 'task-states-date-input';
+const TASK_DATE_MODAL_CLASS_NAME = 'task-states-date-modal';
 const TASK_DATE_INPUT_TYPE_NAME = 'date';
 const TASK_DATE_INVALID_DATE_NOTICE = 'Selecione uma data antes de aplicar.';
 const TASK_DATE_ISO_FORMAT = 'YYYY-MM-DD';
 const TASK_DATE_MODAL_BUTTONS_CLASS_NAME = 'task-states-date-modal-buttons';
-const TASK_DATE_MODAL_TITLE = 'Selecionar data da tarefa';
+const TASK_DATE_MODAL_TITLE = 'Selecione a data da tarefa:';
 const TASK_DATE_NOT_A_TASK_NOTICE = 'A linha atual não é uma tarefa Markdown.';
 const TASK_DATE_TODAY_BUTTON_LABEL = 'Hoje';
 const TASK_DATE_VALUE_RE = /\d{4}-\d{2}-\d{2}/;
 const TASK_LIST_ITEM_NESTED_LIST_SELECTOR = ':scope > ul, :scope > ol';
+const DATAVIEW_INLINE_FIELD_SELECTOR = '.dataview.inline-field';
+const CODE_MIRROR_EDITOR_SELECTOR = '.cm-editor';
 
 /** Normaliza o texto para comparações, removendo espaços duplicados e NBSP. */
 const normalizeTextForComparison = (inputValue) => {
@@ -162,7 +168,22 @@ const extractTaskPreviewText = (taskCheckboxElement) => {
         taskCheckboxElement?.closest?.(TASK_LIST_ITEM_SELECTOR) ??
         taskCheckboxElement?.closest?.(LIST_ITEM_TAG_SELECTOR) ??
         null;
-    const renderedTaskText = taskListItemElement?.innerText?.trim() ?? null;
+
+    if (!taskListItemElement) {
+        return null;
+    }
+
+    const clonedTaskItemElement = taskListItemElement.cloneNode(true);
+
+    for (const dataviewInlineFieldNode of clonedTaskItemElement.querySelectorAll(DATAVIEW_INLINE_FIELD_SELECTOR)) {
+        dataviewInlineFieldNode.remove();
+    }
+
+    for (const ownDateButtonNode of clonedTaskItemElement.querySelectorAll(`.${TASK_DATE_BUTTON_CLASS_NAME}`)) {
+        ownDateButtonNode.remove();
+    }
+
+    const renderedTaskText = clonedTaskItemElement.innerText?.trim() ?? null;
 
     if (!renderedTaskText) {
         return null;
@@ -204,6 +225,7 @@ const stripMarkdownFormattingFromPreviewText = (markdownPreviewText) => {
     let plainPreviewText = String(markdownPreviewText ?? '');
 
     plainPreviewText = plainPreviewText.replace(TASK_MARKER_PREFIX_RE, '');
+    plainPreviewText = plainPreviewText.replace(TASK_DATE_INLINE_FIELD_RE, '');
     plainPreviewText = plainPreviewText.replace(WIKI_LINK_WITH_ALIAS_RE, '$2');
     plainPreviewText = plainPreviewText.replace(WIKI_LINK_RE, '$1');
     plainPreviewText = plainPreviewText.replace(MARKDOWN_LINK_RE, '$1');
@@ -582,10 +604,21 @@ const extractExistingDataviewDateFromTaskLine = (taskLineText) => {
 
 /** Atualiza a linha da tarefa renderizada no modo leitura com a data selecionada. */
 const addDateFieldFromPreviewTask = (obsidianApp, taskCheckboxElement, selectedDateValue) =>
-    applyTransformationToPreviewTaskLine(
-        obsidianApp,
-        taskCheckboxElement,
-        (taskLineText) => addOrReplaceDataviewDateFieldInTaskLine(taskLineText, selectedDateValue)
+    applyTransformationToPreviewTaskLine(obsidianApp, taskCheckboxElement, (taskLineText) =>
+        addOrReplaceDataviewDateFieldInTaskLine(taskLineText, selectedDateValue)
+    );
+
+/** Remove todos os campos `[data:: YYYY-MM-DD]` da linha da tarefa. */
+const removeDataviewDateFieldFromTaskLine = (taskLineText) => {
+    const taskLineValue = String(taskLineText ?? '');
+    const withoutDateField = taskLineValue.replace(TASK_DATE_INLINE_FIELD_WITH_LEADING_SPACE_RE, '');
+    return withoutDateField.replace(TRAILING_WHITESPACE_RE, '');
+};
+
+/** Remove o campo de data da linha real da tarefa no modo leitura. */
+const removeDateFieldFromPreviewTask = (obsidianApp, taskCheckboxElement) =>
+    applyTransformationToPreviewTaskLine(obsidianApp, taskCheckboxElement, (taskLineText) =>
+        removeDataviewDateFieldFromTaskLine(taskLineText)
     );
 
 /** Atualiza a linha do cursor no editor ativo com a data selecionada. */
@@ -620,25 +653,72 @@ const addDateFieldAtCurrentEditorLine = (editorInstance, selectedDateValue) => {
     return setEditorLineText(editorInstance, cursorLineNumber, updatedLineText);
 };
 
+/** Remove o campo de data da linha do cursor no editor ativo. */
+const removeDateFieldAtCurrentEditorLine = (editorInstance) => {
+    if (!editorInstance || typeof editorInstance.getCursor !== 'function') {
+        return false;
+    }
+
+    const cursorPosition = editorInstance.getCursor();
+
+    if (!cursorPosition || typeof cursorPosition.line !== 'number') {
+        return false;
+    }
+
+    const cursorLineNumber = cursorPosition.line;
+    const currentLineText = editorInstance.getLine(cursorLineNumber);
+
+    if (typeof currentLineText !== 'string') {
+        return false;
+    }
+
+    if (!TASK_MARKER_PREFIX_RE.test(currentLineText)) {
+        return false;
+    }
+
+    const updatedLineText = removeDataviewDateFieldFromTaskLine(currentLineText);
+
+    if (updatedLineText === currentLineText) {
+        return false;
+    }
+
+    return setEditorLineText(editorInstance, cursorLineNumber, updatedLineText);
+};
+
 /** Modal de seleção de data utilizado para registrar a data Dataview da tarefa. */
 class TaskDatePickerModal extends Modal {
-    constructor(obsidianApp, initialDateValue, onSubmit) {
+    constructor(obsidianApp, initialDateValue, onSubmit, onClear) {
         super(obsidianApp);
         this.initialDateValue = initialDateValue;
         this.onSubmit = onSubmit;
+        this.onClear = onClear;
     }
 
     /** Constrói o conteúdo do modal e conecta os botões de ação. */
     onOpen() {
+        this.modalEl.classList.add(TASK_DATE_MODAL_CLASS_NAME);
+
         const modalContentElement = this.contentEl;
         modalContentElement.empty();
-        modalContentElement.createEl('h3', { text: TASK_DATE_MODAL_TITLE });
+    modalContentElement.createEl('h3', { text: TASK_DATE_MODAL_TITLE });
 
         const dateInputElement = modalContentElement.createEl('input', { type: TASK_DATE_INPUT_TYPE_NAME });
         dateInputElement.classList.add(TASK_DATE_INPUT_CLASS_NAME);
         dateInputElement.value = this.initialDateValue || getTodayISODate();
 
         const modalButtonsContainer = modalContentElement.createDiv({ cls: TASK_DATE_MODAL_BUTTONS_CLASS_NAME });
+
+        const clearButton = modalButtonsContainer.createEl('button', {
+            text: TASK_DATE_CLEAR_BUTTON_LABEL,
+            cls: TASK_DATE_CLEAR_BUTTON_CLASS_NAME
+        });
+        clearButton.addEventListener(CLICK_EVENT_NAME, () => {
+            this.close();
+
+            if (typeof this.onClear === 'function') {
+                this.onClear();
+            }
+        });
 
         const todayButton = modalButtonsContainer.createEl('button', { text: TASK_DATE_TODAY_BUTTON_LABEL });
         todayButton.addEventListener(CLICK_EVENT_NAME, () => {
@@ -743,8 +823,54 @@ module.exports = class TaskStatesPlugin extends Plugin {
             handleEditModeInteraction(obsidianApp, clickEvent);
         };
 
+        /** Handler delegado: trata clique no botão de data independente de quem reescreveu o DOM. */
+        this._onDateButtonClick = (clickEvent) => {
+            const eventTargetElement = clickEvent.target;
+
+            if (!(eventTargetElement instanceof Element)) {
+                return;
+            }
+
+            const dateButtonElement = eventTargetElement.closest(`.${TASK_DATE_BUTTON_CLASS_NAME}`);
+
+            if (!dateButtonElement) {
+                return;
+            }
+
+            if (dateButtonElement.closest(CODE_MIRROR_EDITOR_SELECTOR)) {
+                return;
+            }
+
+            clickEvent.preventDefault();
+            clickEvent.stopImmediatePropagation();
+
+            const taskListItemElement = dateButtonElement.closest(TASK_LIST_ITEM_SELECTOR);
+
+            if (!taskListItemElement) {
+                return;
+            }
+
+            const taskCheckboxElement = taskListItemElement.querySelector(TASK_CHECKBOX_SELECTOR);
+
+            if (!taskCheckboxElement) {
+                return;
+            }
+
+            new TaskDatePickerModal(
+                obsidianApp,
+                getTodayISODate(),
+                async (selectedDateValue) => {
+                    await addDateFieldFromPreviewTask(obsidianApp, taskCheckboxElement, selectedDateValue);
+                },
+                async () => {
+                    await removeDateFieldFromPreviewTask(obsidianApp, taskCheckboxElement);
+                }
+            ).open();
+        };
+
         document.addEventListener(POINTER_DOWN_EVENT_NAME, this._onPreviewPointerDown, EVENT_LISTENER_CAPTURE_PHASE);
         document.addEventListener(CLICK_EVENT_NAME, this._onEditClick, EVENT_LISTENER_CAPTURE_PHASE);
+        document.addEventListener(CLICK_EVENT_NAME, this._onDateButtonClick, EVENT_LISTENER_CAPTURE_PHASE);
 
         this.registerMarkdownPostProcessor((renderedRootElement) => {
             const taskListItemElements = renderedRootElement.querySelectorAll(TASK_LIST_ITEM_SELECTOR);
@@ -766,15 +892,6 @@ module.exports = class TaskStatesPlugin extends Plugin {
                 dateButtonElement.setAttribute('aria-label', TASK_DATE_BUTTON_LABEL);
                 dateButtonElement.title = TASK_DATE_BUTTON_LABEL;
                 setIcon(dateButtonElement, TASK_DATE_ICON_NAME);
-
-                dateButtonElement.addEventListener(CLICK_EVENT_NAME, (clickEvent) => {
-                    clickEvent.preventDefault();
-                    clickEvent.stopImmediatePropagation();
-
-                    new TaskDatePickerModal(obsidianApp, getTodayISODate(), async (selectedDateValue) => {
-                        await addDateFieldFromPreviewTask(obsidianApp, taskCheckboxElement, selectedDateValue);
-                    }).open();
-                });
 
                 const nestedListElement = taskListItemElement.querySelector(TASK_LIST_ITEM_NESTED_LIST_SELECTOR);
 
@@ -804,12 +921,18 @@ module.exports = class TaskStatesPlugin extends Plugin {
                     return;
                 }
 
-                const initialDateValue =
-                    extractExistingDataviewDateFromTaskLine(currentLineText) ?? getTodayISODate();
+                const initialDateValue = extractExistingDataviewDateFromTaskLine(currentLineText) ?? getTodayISODate();
 
-                new TaskDatePickerModal(obsidianApp, initialDateValue, (selectedDateValue) => {
-                    addDateFieldAtCurrentEditorLine(editorInstance, selectedDateValue);
-                }).open();
+                new TaskDatePickerModal(
+                    obsidianApp,
+                    initialDateValue,
+                    (selectedDateValue) => {
+                        addDateFieldAtCurrentEditorLine(editorInstance, selectedDateValue);
+                    },
+                    () => {
+                        removeDateFieldAtCurrentEditorLine(editorInstance);
+                    }
+                ).open();
             }
         });
     }
@@ -826,12 +949,13 @@ module.exports = class TaskStatesPlugin extends Plugin {
         }
 
         if (this._onEditClick) {
-            document.removeEventListener(
-                CLICK_EVENT_NAME, 
-                this._onEditClick, 
-                EVENT_LISTENER_CAPTURE_PHASE
-            );
+            document.removeEventListener(CLICK_EVENT_NAME, this._onEditClick, EVENT_LISTENER_CAPTURE_PHASE);
             this._onEditClick = null;
+        }
+
+        if (this._onDateButtonClick) {
+            document.removeEventListener(CLICK_EVENT_NAME, this._onDateButtonClick, EVENT_LISTENER_CAPTURE_PHASE);
+            this._onDateButtonClick = null;
         }
     }
 };
