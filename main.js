@@ -893,13 +893,7 @@ module.exports = class TaskStatesPlugin extends Plugin {
                 dateButtonElement.title = TASK_DATE_BUTTON_LABEL;
                 setIcon(dateButtonElement, TASK_DATE_ICON_NAME);
 
-                const nestedListElement = taskListItemElement.querySelector(TASK_LIST_ITEM_NESTED_LIST_SELECTOR);
-
-                if (nestedListElement) {
-                    taskListItemElement.insertBefore(dateButtonElement, nestedListElement);
-                } else {
-                    taskListItemElement.appendChild(dateButtonElement);
-                }
+                taskCheckboxElement.insertAdjacentElement('afterend', dateButtonElement);
             }
         });
 

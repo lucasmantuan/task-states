@@ -223,18 +223,25 @@
     width: 1.5em;
     height: 1.5em;
     margin-left: 0.5em;
+    margin-right: 0.5em;
     padding: 0;
-    background-color: var(--background-secondary);
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
+    background: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
     color: var(--text-muted);
     cursor: pointer;
     vertical-align: middle;
     font-size: 0.85em;
 }
 
-.task-states-date-button:hover {
-    background-color: var(--background-modifier-hover);
+.task-states-date-button:hover,
+.task-states-date-button:focus,
+.task-states-date-button:focus-visible,
+.task-states-date-button:active {
+    background: none !important;
+    box-shadow: none !important;
+    outline: none !important;
     color: var(--text-normal);
 }
 
