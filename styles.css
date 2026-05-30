@@ -1,5 +1,6 @@
 :root {
     /* Task state colors */
+    --task-note: rgba(160, 160, 160, 1);
     --task-background-none: rgba(0, 0, 0, 0);
     --task-cancelled: rgba(220, 70, 70, 1);
     --task-done: rgba(150, 150, 150, 1);
@@ -8,8 +9,24 @@
     --task-progress: rgba(255, 193, 7, 1);
     --task-standby: rgba(180, 120, 255, 1);
     --task-todo: rgba(160, 160, 160, 1);
-    --task-underline-cancelled: rgba(220, 70, 70, 1);
-    --task-underline-done: rgba(150, 150, 150, 1);
+
+    /* Per-state text color overridden at runtime by plugin settings */
+    --task-text-cancelled: rgba(150, 150, 150, 0.6);
+    --task-text-done: rgba(150, 150, 150, 0.6);
+    --task-text-standby: rgba(150, 150, 150, 0.6);
+
+    /* Date tag colors overridden at runtime by plugin settings */
+    --task-date-tag-background: rgba(128, 128, 128, 0.2);
+    --task-date-tag-text: rgba(128, 128, 128, 0.8);
+
+    /* Task state labels overridden at runtime by plugin settings */
+    --task-label-todo: 'TODO';
+    --task-label-progress: 'PROGRESS';
+    --task-label-priority: 'PRIORITY';
+    --task-label-cancelled: 'CANCELLED';
+    --task-label-done: 'DONE';
+    --task-label-standby: 'STANDBY';
+    --task-label-note: 'NOTE';
 
     /* Shared badge and decoration tokens */
     --task-checkbox-gap: 5em;
@@ -20,25 +37,33 @@
     --task-label-edit-width: 6em;
     --task-label-edit-offset-y: -0.2em;
     --task-strike-thickness: 0.02em;
+    --task-slider-thumb-size: 1.3em;
 }
 
-/* Reading view - keep spacing between checkbox and state badge */
+/* Reading view, spacing between the checkbox and the state badge */
 .task-list-item[data-task=''] > .task-list-item-checkbox,
 .task-list-item[data-task='>'] > .task-list-item-checkbox,
 .task-list-item[data-task='!'] > .task-list-item-checkbox,
 .task-list-item[data-task='-'] > .task-list-item-checkbox,
 .task-list-item[data-task='x'] > .task-list-item-checkbox,
-.task-list-item[data-task='*'] > .task-list-item-checkbox {
-    margin-right: var(--task-checkbox-gap) !important;
+.task-list-item[data-task='*'] > .task-list-item-checkbox,
+.task-list-item[data-task=':'] > .task-list-item-checkbox {
+    margin-right: var(--task-checkbox-gap);
 }
 
-/* Reading view - shared badge styling for all custom task states */
+/* Reading and edit views, pointer cursor on the task checkbox */
+.task-list-item-checkbox {
+    cursor: pointer;
+}
+
+/* Reading view, shared badge styling for all custom task states */
 .task-list-item[data-task='']::after,
 .task-list-item[data-task='>']::after,
 .task-list-item[data-task='!']::after,
 .task-list-item[data-task='-']::after,
 .task-list-item[data-task='x']::after,
-.task-list-item[data-task='*']::after {
+.task-list-item[data-task='*']::after,
+.task-list-item[data-task=':']::after {
     position: absolute;
     font-size: var(--task-label-font-size);
     font-weight: var(--task-label-font-weight);
@@ -48,88 +73,107 @@
     transform: translateY(var(--task-label-preview-offset-y));
 }
 
-/* Reading view - muted text styles */
-.task-list-item[data-task='-'],
-.task-list-item[data-task='x'],
-.task-list-item[data-task='*'] {
-    color: var(--task-muted-text) !important;
+/* Reading view, muted text styles using the per-state text color; longhand avoids the text-decoration shorthand warning and the doubled class at specificity 0,3,0 beats the Obsidian and theme task styles, like the checkbox rules */
+.task-list-item.task-list-item[data-task='-'] {
+    color: var(--task-text-cancelled);
+    text-decoration-line: var(--task-strike-cancelled, line-through);
+    text-decoration-style: wavy;
+    text-decoration-color: var(--task-cancelled);
+    text-decoration-thickness: var(--task-strike-thickness);
 }
 
-.task-list-item[data-task='-'] {
-    text-decoration: line-through wavy var(--task-underline-cancelled) var(--task-strike-thickness) !important;
+/* DONE is the checked state that Obsidian styles in reading view with its own color and line-through; this matches every done task and raises specificity through markdown-rendered and a repeated class so the plugin color and strike win without important */
+.markdown-rendered .task-list-item.task-list-item.task-list-item[data-task='x'] {
+    color: var(--task-text-done);
+    text-decoration-line: var(--task-strike-done, line-through);
+    text-decoration-style: wavy;
+    text-decoration-color: var(--task-done);
+    text-decoration-thickness: var(--task-strike-thickness);
 }
 
-.task-list-item[data-task='x'] {
-    text-decoration: line-through wavy var(--task-underline-done) var(--task-strike-thickness) !important;
+.task-list-item.task-list-item[data-task='*'] {
+    color: var(--task-text-standby);
 }
 
+/* Reading view, per-state checkbox color and badge label */
 .task-list-item[data-task=''] > .task-list-item-checkbox {
-    background-color: var(--task-background-none) !important;
-    border-color: var(--task-todo) !important;
+    background-color: var(--task-background-none);
+    border-color: var(--task-todo);
 }
 
 .task-list-item[data-task='']::after {
-    content: 'TODO';
+    content: var(--task-label-todo);
     color: var(--task-todo);
 }
 
 .task-list-item[data-task='>'] > .task-list-item-checkbox {
-    background-color: var(--task-progress) !important;
-    border-color: var(--task-progress) !important;
+    background-color: var(--task-progress);
+    border-color: var(--task-progress);
 }
 
 .task-list-item[data-task='>']::after {
-    content: 'PROGRESS';
+    content: var(--task-label-progress);
     color: var(--task-progress);
 }
 
 .task-list-item[data-task='!'] > .task-list-item-checkbox {
-    background-color: var(--task-priority) !important;
-    border-color: var(--task-priority) !important;
+    background-color: var(--task-priority);
+    border-color: var(--task-priority);
 }
 
 .task-list-item[data-task='!']::after {
-    content: 'PRIORITY';
+    content: var(--task-label-priority);
     color: var(--task-priority);
 }
 
 .task-list-item[data-task='-'] > .task-list-item-checkbox {
-    background-color: var(--task-cancelled) !important;
-    border-color: var(--task-cancelled) !important;
+    background-color: var(--task-cancelled);
+    border-color: var(--task-cancelled);
 }
 
 .task-list-item[data-task='-']::after {
-    content: 'CANCELLED';
+    content: var(--task-label-cancelled);
     color: var(--task-cancelled);
 }
 
 .task-list-item[data-task='x'] > .task-list-item-checkbox {
-    background-color: var(--task-done) !important;
-    border-color: var(--task-done) !important;
+    background-color: var(--task-done);
+    border-color: var(--task-done);
 }
 
 .task-list-item[data-task='x']::after {
-    content: 'DONE';
+    content: var(--task-label-done);
     color: var(--task-done);
 }
 
 .task-list-item[data-task='*'] > .task-list-item-checkbox {
-    background-color: var(--task-standby) !important;
-    border-color: var(--task-standby) !important;
+    background-color: var(--task-standby);
+    border-color: var(--task-standby);
 }
 
 .task-list-item[data-task='*']::after {
-    content: 'STANDBY';
+    content: var(--task-label-standby);
     color: var(--task-standby);
 }
 
-/* Edit view - shared badge styling for all custom task states */
+.task-list-item[data-task=':'] > .task-list-item-checkbox {
+    background-color: var(--task-note);
+    border-color: var(--task-note);
+}
+
+.task-list-item[data-task=':']::after {
+    content: var(--task-label-note);
+    color: var(--task-note);
+}
+
+/* Edit view, shared badge styling for all custom task states */
 .HyperMD-task-line[data-task=' '] label.task-list-label::after,
 .HyperMD-task-line[data-task='>'] label.task-list-label::after,
 .HyperMD-task-line[data-task='!'] label.task-list-label::after,
 .HyperMD-task-line[data-task='-'] label.task-list-label::after,
 .HyperMD-task-line[data-task='x'] label.task-list-label::after,
-.HyperMD-task-line[data-task='*'] label.task-list-label::after {
+.HyperMD-task-line[data-task='*'] label.task-list-label::after,
+.HyperMD-task-line[data-task=':'] label.task-list-label::after {
     position: relative;
     display: inline-block;
     width: var(--task-label-edit-width);
@@ -140,108 +184,171 @@
     top: var(--task-label-edit-offset-y);
 }
 
-/* Edit view - muted text styles */
-.HyperMD-task-line[data-task='-'],
-.HyperMD-task-line[data-task='x'],
-.HyperMD-task-line[data-task='*'] {
-    color: var(--task-muted-text) !important;
+/* Edit view, muted text styles using the per-state text color; longhand avoids the text-decoration shorthand warning and the doubled class at specificity 0,3,0 beats the Obsidian and theme task styles, like the checkbox rules */
+.HyperMD-task-line.HyperMD-task-line[data-task='-'] {
+    color: var(--task-text-cancelled);
+    text-decoration-line: var(--task-strike-cancelled, line-through);
+    text-decoration-style: wavy;
+    text-decoration-color: var(--task-cancelled);
+    text-decoration-thickness: var(--task-strike-thickness);
 }
 
-.HyperMD-task-line[data-task='-'] {
-    text-decoration: line-through wavy var(--task-underline-cancelled) var(--task-strike-thickness) !important;
+/* DONE in Live Preview: Obsidian styles the checked line with a higher-specificity ancestor rule, so this scopes to markdown-source-view and repeats the class to win without important */
+.markdown-source-view .HyperMD-task-line.HyperMD-task-line.HyperMD-task-line[data-task='x'] {
+    color: var(--task-text-done);
+    text-decoration-line: var(--task-strike-done, line-through);
+    text-decoration-style: wavy;
+    text-decoration-color: var(--task-done);
+    text-decoration-thickness: var(--task-strike-thickness);
 }
 
-.HyperMD-task-line[data-task='x'] {
-    text-decoration: line-through wavy var(--task-underline-done) var(--task-strike-thickness) !important;
+.HyperMD-task-line.HyperMD-task-line[data-task='*'] {
+    color: var(--task-text-standby);
 }
 
+/* Edit view, per-state checkbox color and badge label */
 .HyperMD-task-line[data-task=' '] input[type='checkbox'] {
-    background-color: var(--task-background-none) !important;
-    border-color: var(--task-todo) !important;
+    background-color: var(--task-background-none);
+    border-color: var(--task-todo);
 }
 
 .HyperMD-task-line[data-task=' '] label.task-list-label::after {
-    content: 'TODO';
+    content: var(--task-label-todo);
     color: var(--task-todo);
 }
 
 .HyperMD-task-line[data-task='>'] input[type='checkbox'] {
-    background-color: var(--task-progress) !important;
-    border-color: var(--task-progress) !important;
+    background-color: var(--task-progress);
+    border-color: var(--task-progress);
 }
 
 .HyperMD-task-line[data-task='>'] label.task-list-label::after {
-    content: 'PROGRESS';
+    content: var(--task-label-progress);
     color: var(--task-progress);
 }
 
 .HyperMD-task-line[data-task='!'] input[type='checkbox'] {
-    background-color: var(--task-priority) !important;
-    border-color: var(--task-priority) !important;
+    background-color: var(--task-priority);
+    border-color: var(--task-priority);
 }
 
 .HyperMD-task-line[data-task='!'] label.task-list-label::after {
-    content: 'PRIORITY';
+    content: var(--task-label-priority);
     color: var(--task-priority);
 }
 
 .HyperMD-task-line[data-task='-'] input[type='checkbox'] {
-    background-color: var(--task-cancelled) !important;
-    border-color: var(--task-cancelled) !important;
+    background-color: var(--task-cancelled);
+    border-color: var(--task-cancelled);
 }
 
 .HyperMD-task-line[data-task='-'] label.task-list-label::after {
-    content: 'CANCELLED';
+    content: var(--task-label-cancelled);
     color: var(--task-cancelled);
 }
 
 .HyperMD-task-line[data-task='x'] input[type='checkbox'] {
-    background-color: var(--task-done) !important;
-    border-color: var(--task-done) !important;
+    background-color: var(--task-done);
+    border-color: var(--task-done);
 }
 
 .HyperMD-task-line[data-task='x'] label.task-list-label::after {
-    content: 'DONE';
+    content: var(--task-label-done);
     color: var(--task-done);
 }
 
 .HyperMD-task-line[data-task='*'] input[type='checkbox'] {
-    background-color: var(--task-standby) !important;
-    border-color: var(--task-standby) !important;
+    background-color: var(--task-standby);
+    border-color: var(--task-standby);
 }
 
 .HyperMD-task-line[data-task='*'] label.task-list-label::after {
-    content: 'STANDBY';
+    content: var(--task-label-standby);
     color: var(--task-standby);
 }
 
-/* Reading view - botão discreto para registrar a data Dataview da tarefa */
-.task-states-date-button {
+.HyperMD-task-line[data-task=':'] input[type='checkbox'] {
+    background-color: var(--task-note);
+    border-color: var(--task-note);
+}
+
+.HyperMD-task-line[data-task=':'] label.task-list-label::after {
+    content: var(--task-label-note);
+    color: var(--task-note);
+}
+
+/* Reading and edit views, keep each state color when hovering the checkbox; Obsidian input[type=checkbox]:checked:hover at specificity 0,3,1 would paint it with --interactive-accent, so the :hover selectors below reach 0,4,x */
+.task-list-item[data-task=''] > .task-list-item-checkbox:hover,
+.HyperMD-task-line[data-task=' '] input[type='checkbox']:hover {
+    background-color: var(--task-background-none);
+    border-color: var(--task-todo);
+}
+
+.task-list-item[data-task='>'] > .task-list-item-checkbox:hover,
+.HyperMD-task-line[data-task='>'] input[type='checkbox']:hover {
+    background-color: var(--task-progress);
+    border-color: var(--task-progress);
+}
+
+.task-list-item[data-task='!'] > .task-list-item-checkbox:hover,
+.HyperMD-task-line[data-task='!'] input[type='checkbox']:hover {
+    background-color: var(--task-priority);
+    border-color: var(--task-priority);
+}
+
+.task-list-item[data-task='-'] > .task-list-item-checkbox:hover,
+.HyperMD-task-line[data-task='-'] input[type='checkbox']:hover {
+    background-color: var(--task-cancelled);
+    border-color: var(--task-cancelled);
+}
+
+.task-list-item[data-task='x'] > .task-list-item-checkbox:hover,
+.HyperMD-task-line[data-task='x'] input[type='checkbox']:hover {
+    background-color: var(--task-done);
+    border-color: var(--task-done);
+}
+
+.task-list-item[data-task='*'] > .task-list-item-checkbox:hover,
+.HyperMD-task-line[data-task='*'] input[type='checkbox']:hover {
+    background-color: var(--task-standby);
+    border-color: var(--task-standby);
+}
+
+.task-list-item[data-task=':'] > .task-list-item-checkbox:hover,
+.HyperMD-task-line[data-task=':'] input[type='checkbox']:hover {
+    background-color: var(--task-note);
+    border-color: var(--task-note);
+}
+
+/* Reading view, discreet button to set the task Dataview date. Doubled class at specificity 0,2,0 beats the default Obsidian button style at 0,1,1 */
+.task-states-date-button.task-states-date-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    position: relative;
+    top: -1.5px;
     width: 1.5em;
     height: 1.5em;
     margin-left: 0.5em;
     margin-right: 0.5em;
     padding: 0;
-    background: none !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
+    background: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
     color: var(--text-muted);
     cursor: pointer;
     vertical-align: middle;
     font-size: 0.85em;
 }
 
-.task-states-date-button:hover,
-.task-states-date-button:focus,
-.task-states-date-button:focus-visible,
-.task-states-date-button:active {
-    background: none !important;
-    box-shadow: none !important;
-    outline: none !important;
+.task-states-date-button.task-states-date-button:hover,
+.task-states-date-button.task-states-date-button:focus,
+.task-states-date-button.task-states-date-button:focus-visible,
+.task-states-date-button.task-states-date-button:active {
+    background: none;
+    box-shadow: none;
+    outline: none;
     color: var(--text-normal);
 }
 
@@ -251,7 +358,7 @@
     pointer-events: none;
 }
 
-/* Modal de seleção de data */
+/* Date-picker modal */
 .modal.task-states-date-modal {
     width: auto;
     min-width: 240px;
@@ -280,4 +387,192 @@
     justify-content: flex-end;
     gap: 8px;
     margin-top: 16px;
+}
+
+/* Reading view, inline date field rendered by the plugin, Dataview-compatible */
+.HyperMD-task-line .dataview.inline-field,
+.task-list-item .dataview.inline-field {
+    position: relative;
+    top: -1.5px;
+    background-color: var(--task-date-tag-background);
+    border-radius: 4px;
+    border: none;
+    font-size: 0.7em;
+    padding: 0.15em 0.25em;
+    margin: 0 0.25em;
+}
+
+.HyperMD-task-line .dataview.inline-field-key,
+.task-list-item .dataview.inline-field-key {
+    display: none;
+}
+
+.HyperMD-task-line .dataview.inline-field-value,
+.task-list-item .dataview.inline-field-value {
+    color: var(--task-date-tag-text);
+    background-color: transparent;
+    text-transform: capitalize;
+    padding: 0;
+}
+
+/* Settings tab, reorder hint above the draggable cycle list */
+.task-states-settings .task-states-cycle-hint {
+    margin: 0.75em 0 0.75em;
+    color: var(--text-muted);
+    font-size: 0.85em;
+}
+
+/* Settings tab, draggable rows for the intermediate cycle states */
+.task-states-settings .task-states-cycle-row .setting-item-info {
+    flex: 1 1 auto;
+}
+
+.task-states-settings .task-states-cycle-row.is-dragging {
+    opacity: 0.5;
+}
+
+.task-states-settings .task-states-cycle-row.is-drag-over {
+    background-color: var(--background-modifier-hover);
+}
+
+.task-states-settings .task-states-drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 0.5em;
+    color: var(--text-muted);
+    cursor: grab;
+}
+
+.task-states-settings .task-states-drag-handle:active {
+    cursor: grabbing;
+}
+
+.task-states-settings .task-states-drag-handle svg {
+    width: 1em;
+    height: 1em;
+    pointer-events: none;
+}
+
+/* Settings tab, color picker rendered as a circle next to each label input */
+.task-states-settings input[type='color'] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 1.5em;
+    height: 1.5em;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 50%;
+    padding: 0;
+    cursor: pointer;
+    background-color: transparent;
+}
+
+.task-states-settings input[type='color']::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.task-states-settings input[type='color']::-webkit-color-swatch {
+    border: none;
+    border-radius: 50%;
+}
+
+.task-states-settings input[type='color']::-moz-color-swatch {
+    border: none;
+    border-radius: 50%;
+}
+
+/* Settings tab, uniform width keeps every state label input aligned with or without a text color picker */
+.task-states-settings .setting-item[data-state-key] .setting-item-control input[type='text'] {
+    width: 10em;
+}
+
+/* Settings tab, opacity slider: thumb slightly smaller than the 1.5em color picker and centered on the track; overrides the native Obsidian variables so the thumb centering math is preserved */
+.task-states-settings input[type='range'] {
+    --slider-thumb-height: var(--task-slider-thumb-size);
+    --slider-thumb-width: var(--task-slider-thumb-size);
+}
+
+.task-states-settings input[type='range']::-moz-range-thumb {
+    width: var(--task-slider-thumb-size);
+    height: var(--task-slider-thumb-size);
+}
+
+/* Settings tab, marker badge shown in each state description */
+.task-states-settings .setting-item[data-state-key] .setting-item-description {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5em;
+}
+
+.task-states-settings .task-states-marker {
+    display: inline-flex;
+    align-self: center;
+    gap: 0.15em;
+    padding: 0;
+    border: none;
+    font-family: var(--font-monospace);
+    font-weight: 800;
+    font-size: 1.4em;
+    line-height: 1;
+}
+
+.task-states-settings .task-states-marker-bracket {
+    color: var(--text-muted);
+    font-weight: 800;
+}
+
+/* Marker glyph nudged up slightly so it sits optically centered between the brackets */
+.task-states-settings .task-states-marker-char {
+    position: relative;
+    top: -0.06em;
+    min-width: 1ch;
+    text-align: center;
+    font-weight: 800;
+    font-family: var(--font-monospace);
+    color: var(--text-normal);
+    line-height: 1;
+}
+
+/* Settings tab, tint each marker symbol with its live state color */
+.task-states-settings .setting-item[data-state-key='todo'] .task-states-marker-char {
+    color: var(--task-todo);
+}
+
+.task-states-settings .setting-item[data-state-key='progress'] .task-states-marker-char {
+    color: var(--task-progress);
+}
+
+.task-states-settings .setting-item[data-state-key='priority'] .task-states-marker-char {
+    color: var(--task-priority);
+}
+
+.task-states-settings .setting-item[data-state-key='cancelled'] .task-states-marker-char {
+    color: var(--task-cancelled);
+}
+
+.task-states-settings .setting-item[data-state-key='done'] .task-states-marker-char {
+    color: var(--task-done);
+}
+
+.task-states-settings .setting-item[data-state-key='standby'] .task-states-marker-char {
+    color: var(--task-standby);
+}
+
+.task-states-settings .setting-item[data-state-key='note'] .task-states-marker-char {
+    color: var(--task-note);
+}
+
+/* Settings tab, Strikethrough and Font Color labels plus the compact toggle for Cancelled, Done, and Standby */
+.task-states-settings .task-states-strike-label,
+.task-states-settings .task-states-font-color-label {
+    margin-right: 0.1em;
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+}
+
+/* Settings tab, compact strikethrough toggle */
+.task-states-settings .task-states-strike-toggle {
+    transform: scale(0.8);
+    margin-left: 0.1em;
 }
